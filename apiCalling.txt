@@ -1,0 +1,1057 @@
+===================== MLM WALLET SYSTEM API DOCUMENTATION =====================
+
+BASE URL: http://localhost:3100
+
+========================= SYSTEM FEATURES =========================
+
+1. MLM STRUCTURE (UP TO 10 LEVELS):
+   - When a user registers with a referral code, they join the MLM network
+   - Users can earn from their downline up to 10 levels deep
+   - Each user gets a unique referral code for sharing
+
+2. DUAL WALLET SYSTEM:
+   - Normal Wallet: For regular transactions and deposits
+   - Benefit Wallet: For bonuses and MLM benefits (2x the normal wallet on recharge)
+
+3. DAILY GROWTH SYSTEM (200 DAYS):
+   - When a user makes a deposit, it grows daily for 200 days
+   - Normal wallet grows at 5% of deposit amount daily
+   - Benefit wallet grows at 10% of deposit amount daily
+   - Growth stops automatically after 200 days
+
+4. DEPOSIT REQUEST SYSTEM:
+   - Users send deposit requests to admins
+   - Admins can approve or reject deposit requests
+   - When approved, funds are added to both wallets:
+     * Normal wallet: 1x the requested amount
+     * Benefit wallet: 2x the requested amount
+   - MLM benefits (1%) are distributed to ancestors
+
+4. COLOR PREDICTION GAME:
+   - Users can join game rooms with an entry fee from both wallets:
+     * Normal wallet: Standard entry fee (default 50 Rs)
+     * Benefit wallet: 2x the normal fee (default 100 Rs)
+   - Each room can have up to 20 players (configurable by admin)
+   - Players choose from 4 colors: red, green, blue, yellow
+   - The winning color is the one with the fewest selections
+   - Winners receive 100 Rs in their normal wallet
+
+================================ USER APIs ================================
+
+1. REGISTER USER
+   - URL: /api/users/register
+   - Method: POST
+   - Body: 
+     {
+       "name": "User Name",
+       "email": "user@example.com",
+       "password": "password123",
+       "referralCode": "ABC123" (optional)
+     }
+   - Response: 
+     {
+       "success": true,
+       "message": "User registered successfully",
+       "token": "jwt_token",
+       "user": {
+         "id": "user_id",
+         "name": "User Name",
+         "email": "user@example.com",
+         "referralCode": "XYZ789",
+         "level": 0,
+         "wallet": {
+           "normal": 0,
+           "benefit": 0
+         }
+       }
+     }
+
+2. LOGIN USER
+   - URL: /api/users/login
+   - Method: POST
+   - Body: 
+     {
+       "email": "user@example.com",
+       "password": "password123"
+     }
+   - Response: 
+     {
+       "success": true,
+       "message": "Login successful",
+       "token": "jwt_token",
+       "user": {
+         "id": "user_id",
+         "name": "User Name",
+         "email": "user@example.com",
+         "referralCode": "XYZ789",
+         "level": 0,
+         "wallet": {
+           "normal": 0,
+           "benefit": 0
+         }
+       }
+     }
+
+3. GET USER PROFILE
+   - URL: /api/users/profile
+   - Method: GET
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Response: 
+     {
+       "success": true,
+       "user": {
+         "id": "user_id",
+         "name": "User Name",
+         "email": "user@example.com",
+         "referralCode": "XYZ789",
+         "level": 0,
+         "wallet": {
+           "normal": 0,
+           "benefit": 0
+         }
+       }
+     }
+
+4. GET USER WALLET BALANCE
+   - URL: /api/users/wallet
+   - Method: GET
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Response: 
+     {
+       "success": true,
+       "wallet": {
+         "normal": 1000,
+         "benefit": 2000
+       }
+     }
+
+5. GET USER TRANSACTIONS
+   - URL: /api/users/transactions
+   - Method: GET
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Response: 
+     {
+       "success": true,
+       "transactions": [
+         {
+           "id": "transaction_id",
+           "userId": "user_id",
+           "type": "recharge",
+           "amount": 1000,
+           "walletType": "normal",
+           "status": "completed",
+           "description": "Wallet recharge by admin",
+           "performedBy": {
+             "name": "Admin Name",
+             "email": "admin@example.com"
+           },
+           "createdAt": "2025-05-29T06:00:00.000Z"
+         }
+       ]
+     }
+
+6. GET USER REFERRALS
+   - URL: /api/users/referrals
+   - Method: GET
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Response: 
+     {
+       "success": true,
+       "referrals": [
+         {
+           "id": "user_id",
+           "name": "Referred User",
+           "email": "referred@example.com",
+           "level": 1,
+           "createdAt": "2025-05-29T06:00:00.000Z"
+         }
+       ]
+     }
+
+7. GET MLM DOWNLINE NETWORK
+   - URL: /api/users/network
+   - Method: GET
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Response: 
+     {
+       "success": true,
+       "network": {
+         "1": [
+           {
+             "id": "user_id",
+             "name": "Level 1 User",
+             "email": "level1@example.com",
+             "joinedAt": "2025-05-29T06:00:00.000Z"
+           }
+         ],
+         "2": [
+           {
+             "id": "user_id",
+             "name": "Level 2 User",
+             "email": "level2@example.com",
+             "joinedAt": "2025-05-29T06:00:00.000Z"
+           }
+         ]
+       }
+     }
+
+8. GET USER LEVEL DETAILS
+   - URL: /api/users/level
+   - Method: GET
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Response: 
+     {
+       "success": true,
+       "userLevel": {
+         "currentLevel": 2,
+         "referralCode": "ABC123",
+         "referredBy": {
+           "id": "user_id",
+           "name": "Referrer Name",
+           "email": "referrer@example.com"
+         },
+         "directReferrals": 5,
+         "totalDownlineMembers": 15,
+         "levelDistribution": {
+           "1": 5,
+           "2": 7,
+           "3": 3
+         }
+       }
+     }
+
+9. CREATE NEW DEPOSIT FOR GROWTH
+   - URL: /api/users/deposit
+   - Method: POST
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Body: 
+     {
+       "amount": 1000
+     }
+   - Response: 
+     {
+       "success": true,
+       "message": "Deposit created successfully. Your wallet will grow daily for 200 days.",
+       "deposit": {
+         "id": "deposit_id",
+         "amount": 1000,
+         "startDate": "2025-05-29T06:00:00.000Z",
+         "endDate": "2025-12-15T06:00:00.000Z",
+         "normalGrowthRate": "5%",
+         "benefitGrowthRate": "10%"
+       }
+     }
+
+10. GET USER DEPOSITS
+   - URL: /api/users/deposits
+   - Method: GET
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Response: 
+     {
+       "success": true,
+       "deposits": [
+         {
+           "id": "deposit_id",
+           "amount": 1000,
+           "startDate": "2025-05-29T06:00:00.000Z",
+           "endDate": "2025-12-15T06:00:00.000Z",
+           "daysGrown": 30,
+           "isActive": true,
+           "normalGrowthRate": "5%",
+           "benefitGrowthRate": "10%",
+           "totalNormalGrowth": 1500,
+           "totalBenefitGrowth": 3000,
+           "lastGrowthDate": "2025-06-28T06:00:00.000Z"
+         }
+       ]
+     }
+
+11. GET REFERRAL LINK FOR SHARING
+   - URL: /api/users/referral-link
+   - Method: GET
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Response: 
+     {
+       "success": true,
+       "referralCode": "ABC123",
+       "referralLink": "http://localhost:3000/register?ref=ABC123",
+       "shareOptions": {
+         "plain": "http://localhost:3000/register?ref=ABC123",
+         "whatsapp": "https://wa.me/?text=Join me on this amazing platform and earn rewards! Use my referral code: ABC123 or sign up here: http://localhost:3000/register?ref=ABC123",
+         "facebook": "https://www.facebook.com/sharer/sharer.php?u=http%3A%2F%2Flocalhost%3A3000%2Fregister%3Fref%3DABC123",
+         "twitter": "https://twitter.com/intent/tweet?url=http%3A%2F%2Flocalhost%3A3000%2Fregister%3Fref%3DABC123&text=Join%20me%20on%20this%20amazing%20platform%20and%20earn%20rewards!%20Use%20my%20referral%20code%3A%20ABC123"
+       }
+     }
+
+12. CREATE NEW DEPOSIT REQUEST
+   - URL: /api/users/deposit-request
+   - Method: POST
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Body: 
+     {
+       "amount": 1000,
+       "notes": "Deposit via UPI" (optional)
+     }
+   - Response: 
+     {
+       "success": true,
+       "message": "Deposit request created successfully. Waiting for admin approval.",
+       "depositRequest": {
+         "id": "request_id",
+         "amount": 1000,
+         "status": "pending",
+         "requestDate": "2025-06-01T12:00:00.000Z",
+         "notes": "Deposit via UPI"
+       }
+     }
+
+13. GET ALL DEPOSIT REQUESTS
+   - URL: /api/users/deposit-requests
+   - Method: GET
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Response: 
+     {
+       "success": true,
+       "depositRequests": [
+         {
+           "id": "request_id",
+           "amount": 1000,
+           "status": "pending",
+           "requestDate": "2025-06-01T12:00:00.000Z",
+           "approvedDate": null,
+           "rejectedDate": null,
+           "rejectionReason": null,
+           "notes": "Deposit via UPI"
+         }
+       ]
+     }
+
+14. GET SPECIFIC DEPOSIT REQUEST
+   - URL: /api/users/deposit-request/:id
+   - Method: GET
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Response: 
+     {
+       "success": true,
+       "depositRequest": {
+         "id": "request_id",
+         "amount": 1000,
+         "status": "pending",
+         "requestDate": "2025-06-01T12:00:00.000Z",
+         "approvedDate": null,
+         "rejectedDate": null,
+         "rejectionReason": null,
+         "notes": "Deposit via UPI",
+         "transaction": null
+       }
+     }
+
+================================ ADMIN APIs ================================
+
+1. REGISTER ADMIN (Internal or by superadmin)
+   - URL: /api/admin/register
+   - Method: POST
+   - Body: 
+     {
+       "name": "Admin Name",
+       "email": "admin@example.com",
+       "password": "admin123",
+       "role": "admin" (optional, can be "admin" or "superadmin")
+     }
+   - Response: 
+     {
+       "success": true,
+       "message": "Admin registered successfully",
+       "admin": {
+         "id": "admin_id",
+         "name": "Admin Name",
+         "email": "admin@example.com",
+         "role": "admin"
+       }
+     }
+
+2. LOGIN ADMIN
+   - URL: /api/admin/login
+   - Method: POST
+   - Body: 
+     {
+       "email": "admin@example.com",
+       "password": "admin123"
+     }
+   - Response: 
+     {
+       "success": true,
+       "message": "Login successful",
+       "token": "jwt_token",
+       "admin": {
+         "id": "admin_id",
+         "name": "Admin Name",
+         "email": "admin@example.com",
+         "role": "admin"
+       }
+     }
+
+3. GET ADMIN PROFILE
+   - URL: /api/admin/profile
+   - Method: GET
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Response: 
+     {
+       "success": true,
+       "admin": {
+         "id": "admin_id",
+         "name": "Admin Name",
+         "email": "admin@example.com",
+         "role": "admin"
+       }
+     }
+
+4. GET ALL USERS
+   - URL: /api/admin/users
+   - Method: GET
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Response: 
+     {
+       "success": true,
+       "count": 10,
+       "users": [
+         {
+           "id": "user_id",
+           "name": "User Name",
+           "email": "user@example.com",
+           "referralCode": "XYZ789",
+           "level": 0,
+           "wallet": {
+             "normal": 1000,
+             "benefit": 2000
+           }
+         }
+       ]
+     }
+
+5. GET USER BY ID
+   - URL: /api/admin/users/:id
+   - Method: GET
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Response: 
+     {
+       "success": true,
+       "user": {
+         "id": "user_id",
+         "name": "User Name",
+         "email": "user@example.com",
+         "referralCode": "XYZ789",
+         "level": 0,
+         "wallet": {
+           "normal": 1000,
+           "benefit": 2000
+         }
+       }
+     }
+
+6. RECHARGE USER WALLET
+   - URL: /api/admin/recharge-wallet
+   - Method: POST
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Body: 
+     {
+       "userId": "user_id",
+       "amount": 1000
+     }
+   - Response: 
+     {
+       "success": true,
+       "message": "Wallet recharged successfully",
+       "wallet": {
+         "normal": 1000,
+         "benefit": 2000
+       }
+     }
+
+7. GET ALL TRANSACTIONS
+   - URL: /api/admin/transactions
+   - Method: GET
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Response: 
+     {
+       "success": true,
+       "count": 20,
+       "transactions": [
+         {
+           "id": "transaction_id",
+           "userId": {
+             "id": "user_id",
+             "name": "User Name",
+             "email": "user@example.com"
+           },
+           "type": "recharge",
+           "amount": 1000,
+           "walletType": "normal",
+           "status": "completed",
+           "description": "Wallet recharge by admin",
+           "performedBy": {
+             "id": "admin_id",
+             "name": "Admin Name",
+             "email": "admin@example.com"
+           },
+           "createdAt": "2025-05-29T06:00:00.000Z"
+         }
+       ]
+     }
+
+8. GET USER TRANSACTIONS
+   - URL: /api/admin/user-transactions/:userId
+   - Method: GET
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Response: 
+     {
+       "success": true,
+       "count": 5,
+       "transactions": [
+         {
+           "id": "transaction_id",
+           "userId": "user_id",
+           "type": "recharge",
+           "amount": 1000,
+           "walletType": "normal",
+           "status": "completed",
+           "description": "Wallet recharge by admin",
+           "performedBy": {
+             "id": "admin_id",
+             "name": "Admin Name",
+             "email": "admin@example.com"
+           },
+           "createdAt": "2025-05-29T06:00:00.000Z"
+         }
+       ]
+     }
+
+9. GET MLM STATISTICS
+   - URL: /api/admin/mlm-stats
+   - Method: GET
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Response: 
+     {
+       "success": true,
+       "stats": {
+         "totalUsers": 50,
+         "levelStats": [
+           { "_id": 0, "count": 10 },
+           { "_id": 1, "count": 15 },
+           { "_id": 2, "count": 25 }
+         ],
+         "walletStats": {
+           "totalNormal": 50000,
+           "totalBenefit": 100000
+         }
+       }
+     }
+
+10. GET ALL DEPOSIT REQUESTS
+   - URL: /api/admin/deposit-requests
+   - Method: GET
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Query Parameters: 
+     status=pending (optional, filter by status: pending, approved, rejected)
+   - Response: 
+     {
+       "success": true,
+       "count": 10,
+       "depositRequests": [
+         {
+           "id": "request_id",
+           "user": {
+             "id": "user_id",
+             "name": "User Name",
+             "email": "user@example.com"
+           },
+           "amount": 1000,
+           "status": "pending",
+           "requestDate": "2025-06-01T12:00:00.000Z",
+           "approvedDate": null,
+           "rejectedDate": null,
+           "rejectionReason": null,
+           "notes": "Deposit via UPI"
+         }
+       ]
+     }
+
+11. GET SPECIFIC DEPOSIT REQUEST
+   - URL: /api/admin/deposit-request/:id
+   - Method: GET
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Response: 
+     {
+       "success": true,
+       "depositRequest": {
+         "id": "request_id",
+         "user": {
+           "id": "user_id",
+           "name": "User Name",
+           "email": "user@example.com",
+           "wallet": {
+             "normal": 500,
+             "benefit": 1000
+           }
+         },
+         "amount": 1000,
+         "status": "pending",
+         "requestDate": "2025-06-01T12:00:00.000Z",
+         "approvedBy": null,
+         "approvedDate": null,
+         "rejectedBy": null,
+         "rejectedDate": null,
+         "rejectionReason": null,
+         "notes": "Deposit via UPI",
+         "transaction": null
+       }
+     }
+
+12. APPROVE DEPOSIT REQUEST
+   - URL: /api/admin/deposit-request/:id/approve
+   - Method: POST
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Response: 
+     {
+       "success": true,
+       "message": "Deposit request approved successfully",
+       "depositRequest": {
+         "id": "request_id",
+         "status": "approved",
+         "approvedBy": "admin_id",
+         "approvedDate": "2025-06-02T12:00:00.000Z"
+       },
+       "updatedWallet": {
+         "normal": 1500,
+         "benefit": 3000
+       },
+       "deposit": {
+         "id": "deposit_id",
+         "amount": 1000,
+         "startDate": "2025-06-02T12:00:00.000Z",
+         "endDate": null
+       }
+     }
+
+13. REJECT DEPOSIT REQUEST
+   - URL: /api/admin/deposit-request/:id/reject
+   - Method: POST
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Body: 
+     {
+       "reason": "Invalid payment proof" (optional)
+     }
+   - Response: 
+     {
+       "success": true,
+       "message": "Deposit request rejected successfully",
+       "depositRequest": {
+         "id": "request_id",
+         "status": "rejected",
+         "rejectedBy": "admin_id",
+         "rejectedDate": "2025-06-02T12:00:00.000Z",
+         "rejectionReason": "Invalid payment proof"
+       }
+     }
+
+================================ GAME APIs ================================
+
+1. GET AVAILABLE GAME ROOMS (USER)
+   - URL: /api/game/rooms
+   - Method: GET
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Response: 
+     {
+       "success": true,
+       "gameRooms": [
+         {
+           "id": "room_id",
+           "roomId": "ROOM1A2B3C",
+           "entryFee": 50,
+           "benefitFeeMultiplier": 2,
+           "winningAmount": 100,
+           "maxPlayers": 20,
+           "currentPlayers": 5,
+           "availableColors": ["red", "green", "blue", "yellow"],
+           "status": "waiting",
+           "createdAt": "2025-05-29T06:00:00.000Z"
+         }
+       ]
+     }
+
+2. GET SPECIFIC GAME ROOM DETAILS
+   - URL: /api/game/room/:roomId
+   - Method: GET
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Response: 
+     {
+       "success": true,
+       "gameRoom": {
+         "id": "room_id",
+         "roomId": "ROOM1A2B3C",
+         "entryFee": 50,
+         "benefitFeeMultiplier": 2,
+         "winningAmount": 100,
+         "maxPlayers": 20,
+         "currentPlayers": 5,
+         "availableColors": ["red", "green", "blue", "yellow"],
+         "colorCounts": {
+           "red": 2,
+           "green": 1,
+           "blue": 1,
+           "yellow": 1
+         },
+         "status": "waiting",
+         "createdAt": "2025-05-29T06:00:00.000Z"
+       },
+       "players": [
+         {
+           "id": "player_id",
+           "user": {
+             "id": "user_id",
+             "name": "Player Name",
+             "email": "player@example.com"
+           },
+           "colorSelected": "red",
+           "hasWon": false,
+           "joinedAt": "2025-05-29T06:15:00.000Z"
+         }
+       ]
+     }
+
+3. JOIN A GAME ROOM WITH COLOR SELECTION
+   - URL: /api/game/room/join
+   - Method: POST
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Body: 
+     {
+       "roomId": "ROOM1A2B3C",
+       "colorSelected": "red"   // Can be "red", "green", "blue", or "yellow"
+     }
+   - Response: 
+     {
+       "success": true,
+       "message": "Successfully joined the game room",
+       "player": {
+         "id": "player_id",
+         "colorSelected": "red",
+         "paymentDetails": {
+           "normalWalletDeduction": 50,
+           "benefitWalletDeduction": 100,
+           "totalPaid": 150
+         }
+       },
+       "gameRoom": {
+         "id": "room_id",
+         "roomId": "ROOM1A2B3C",
+         "entryFee": 50,
+         "benefitFeeMultiplier": 2,
+         "winningAmount": 100,
+         "maxPlayers": 20,
+         "currentPlayers": 6,
+         "availableColors": ["red", "green", "blue", "yellow"],
+         "colorCounts": {
+           "red": 3,
+           "green": 1,
+           "blue": 1,
+           "yellow": 1
+         },
+         "status": "waiting"
+       },
+       "remainingBalance": {
+         "normal": 950,
+         "benefit": 1900
+       }
+     }
+
+4. GET USER'S GAME HISTORY
+   - URL: /api/game/history
+   - Method: GET
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Response: 
+     {
+       "success": true,
+       "gameHistory": [
+         {
+           "id": "player_id",
+           "roomId": "ROOM1A2B3C",
+           "colorSelected": "red",
+           "hasWon": true,
+           "paymentDetails": {
+             "normalWalletDeduction": 50,
+             "benefitWalletDeduction": 100,
+             "totalPaid": 150
+           },
+           "amountWon": 100,
+           "winningColor": "red",
+           "joinedAt": "2025-05-29T06:15:00.000Z",
+           "gameStatus": "completed",
+           "gameEndTime": "2025-05-29T07:30:00.000Z"
+         }
+       ]
+     }
+
+================================ ADMIN GAME APIs ================================
+
+1. CREATE A NEW GAME ROOM (ADMIN)
+   - URL: /api/admin/game/room/create
+   - Method: POST
+   - Headers: 
+     Authorization: Bearer jwt_token (admin token)
+   - Body: 
+     {
+       "entryFee": 50,                      // Optional, default is 50
+       "benefitFeeMultiplier": 2,          // Optional, default is 2
+       "winningAmount": 100,               // Optional, default is 100
+       "maxPlayers": 20,                  // Optional, default is 20
+       "availableColors": ["red", "green", "blue", "yellow"] // Optional
+     }
+   - Response: 
+     {
+       "success": true,
+       "message": "Game room created successfully",
+       "gameRoom": {
+         "id": "room_id",
+         "roomId": "ROOM1A2B3C",
+         "entryFee": 50,
+         "benefitFeeMultiplier": 2,
+         "winningAmount": 100,
+         "maxPlayers": 20,
+         "availableColors": ["red", "green", "blue", "yellow"],
+         "status": "waiting"
+       }
+     }
+
+2. GET ALL GAME ROOMS (ADMIN)
+   - URL: /api/admin/game/rooms
+   - Method: GET
+   - Headers: 
+     Authorization: Bearer jwt_token (admin token)
+   - Response: 
+     {
+       "success": true,
+       "count": 10,
+       "gameRooms": [
+         {
+           "id": "room_id",
+           "roomId": "ROOM1A2B3C",
+           "entryFee": 50,
+           "benefitFeeMultiplier": 2,
+           "winningAmount": 100,
+           "maxPlayers": 20,
+           "currentPlayers": 15,
+           "availableColors": ["red", "green", "blue", "yellow"],
+           "colorCounts": {
+             "red": 5,
+             "green": 4,
+             "blue": 4,
+             "yellow": 2
+           },
+           "winningColor": "yellow",
+           "status": "completed",
+           "createdAt": "2025-05-29T06:00:00.000Z"
+         }
+       ]
+     }
+
+3. GET GAME ROOM STATISTICS (ADMIN)
+   - URL: /api/admin/game/room/:roomId/stats
+   - Method: GET
+   - Headers: 
+     Authorization: Bearer jwt_token (admin token)
+   - Response: 
+     {
+       "success": true,
+       "gameRoom": {
+         "id": "room_id",
+         "roomId": "ROOM1A2B3C",
+         "entryFee": 50,
+         "benefitFeeMultiplier": 2,
+         "winningAmount": 100,
+         "maxPlayers": 20,
+         "currentPlayers": 20,
+         "availableColors": ["red", "green", "blue", "yellow"],
+         "colorCounts": {
+           "red": 5,
+           "green": 8,
+           "blue": 5,
+           "yellow": 2
+         },
+         "winningColor": "yellow",
+         "status": "completed",
+         "createdAt": "2025-05-29T06:00:00.000Z"
+       },
+       "statistics": {
+         "colorStats": {
+           "red": {
+             "count": 5,
+             "players": [/* Array of player details */]
+           },
+           "green": {
+             "count": 8,
+             "players": [/* Array of player details */]
+           },
+           "blue": {
+             "count": 5,
+             "players": [/* Array of player details */]
+           },
+           "yellow": {
+             "count": 2,
+             "players": [/* Array of player details */]
+           }
+         },
+         "totalNormalDeducted": 1000,
+         "totalBenefitDeducted": 2000,
+         "totalPaid": 3000,
+         "totalWon": 200,
+         "profit": 2800
+       }
+     }
+
+4. CLOSE A GAME ROOM AND AUTO-RESET (ADMIN)
+   - URL: /api/admin/game/room/:roomId/close
+   - Method: POST
+   - Headers: 
+     Authorization: Bearer jwt_token (admin token)
+   - Response: 
+     {
+       "success": true,
+       "message": "Game room closed and automatically reset for new players",
+       "gameResults": {
+         "id": "history_id",
+         "roomId": "HIST1A2B3C",         // ID for the history record
+         "originalRoomId": "ROOM1A2B3C", // Original room ID that was reset
+         "winningColor": "yellow",
+         "colorCounts": {
+           "red": 5,
+           "green": 8,
+           "blue": 5,
+           "yellow": 2
+         },
+         "status": "completed"
+       },
+       "newGameRoom": {
+         "id": "room_id",
+         "roomId": "ROOM1A2B3C",
+         "entryFee": 50,
+         "benefitFeeMultiplier": 2,
+         "winningAmount": 100,
+         "maxPlayers": 20,
+         "currentPlayers": 0,
+         "availableColors": ["red", "green", "blue", "yellow"],
+         "status": "waiting"
+       }
+     }
+
+5. RESET A GAME ROOM FOR NEW PLAYERS (ADMIN)
+   - URL: /api/admin/game/room/:roomId/reset
+   - Method: POST
+   - Headers: 
+     Authorization: Bearer jwt_token (admin token)
+   - Response: 
+     {
+       "success": true,
+       "message": "Game room reset successfully and ready for new players",
+       "gameRoom": {
+         "id": "room_id",
+         "roomId": "ROOM1A2B3C",
+         "entryFee": 50,
+         "benefitFeeMultiplier": 2,
+         "winningAmount": 100,
+         "maxPlayers": 20,
+         "currentPlayers": 0,
+         "availableColors": ["red", "green", "blue", "yellow"],
+         "status": "waiting"
+       }
+     }
+
+========================= HOW THE SYSTEM WORKS =========================
+
+1. COLOR PREDICTION GAME:
+   - Each game room can have up to 10 players
+   - Each player pays a 50 Rs entry fee from their normal wallet
+   - Players can choose either red or green color
+   - The game algorithm determines the winning color based on player choices:
+     a) If all 9 players choose the same color, the opposite color wins
+     b) If players choose mixed colors, the color with fewer selections wins
+   - The 10th player automatically gets assigned the winning color
+   - The winning player receives 100 Rs in their normal wallet
+   - Once a game is completed, the results are final and recorded in transaction history
+
+2. MLM STRUCTURE:
+   - When a user registers with a referral code, they become level 1 in the referrer's downline
+   - The referrer becomes the user's direct ancestor (level 1)
+   - The ancestors of the referrer become the user's ancestors (with levels increased by 1)
+   - Maximum of 10 levels are tracked in the MLM structure
+
+2. WALLET SYSTEM:
+   - Each user has two wallets:
+     a) Normal Wallet: Used for regular transactions
+     b) Benefit Wallet: Stores bonuses and MLM benefits (2x the normal wallet on recharge)
+
+3. RECHARGE PROCESS:
+   - When admin recharges a user's wallet:
+     a) Normal wallet is credited with the recharge amount
+     b) Benefit wallet is credited with 2x the recharge amount
+     c) All ancestors in the MLM structure receive 1% of the recharge amount in their benefit wallet
+
+4. MLM BENEFITS:
+   - When a user's wallet is recharged, all their ancestors (up to 10 levels) receive 1% benefit
+   - Benefits are automatically distributed when an admin recharges a user's wallet
+   - Benefits are credited to the ancestors' benefit wallet
+
+========================= EXAMPLE SCENARIOS =========================
+
+SCENARIO 1: User Registration with Referral
+1. User A registers without a referral code (level 0)
+2. User B registers with User A's referral code
+   - User B becomes level 1
+   - User A is set as User B's direct referrer
+   - User A is added to User B's ancestors list (level 1)
+3. User C registers with User B's referral code
+   - User C becomes level 1
+   - User B is set as User C's direct referrer
+   - User B is added to User C's ancestors list (level 1)
+   - User A is added to User C's ancestors list (level 2)
+
+SCENARIO 2: Wallet Recharge
+1. Admin recharges User C's wallet with 1000 coins
+   - User C's normal wallet: +1000 coins
+   - User C's benefit wallet: +2000 coins
+   - User B (level 1 ancestor) benefit wallet: +10 coins (1% of 1000)
+   - User A (level 2 ancestor) benefit wallet: +10 coins (1% of 1000)
+
+SCENARIO 3: Viewing MLM Network
+1. User A can view their MLM network:
+   - Level 1: User B
+   - Level 2: User C
+2. User B can view their MLM network:
+   - Level 1: User C
+3. User C has no downline network yet

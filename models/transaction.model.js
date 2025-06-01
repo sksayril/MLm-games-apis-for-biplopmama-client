@@ -8,7 +8,7 @@ const transactionSchema = new mongoose.Schema({
     },
     type: {
         type: String,
-        enum: ['recharge', 'bonus', 'withdrawal', 'transfer'],
+        enum: ['recharge', 'bonus', 'withdrawal', 'transfer', 'game'],
         required: true
     },
     amount: {
@@ -17,7 +17,7 @@ const transactionSchema = new mongoose.Schema({
     },
     walletType: {
         type: String,
-        enum: ['normal', 'benefit'],
+        enum: ['normal', 'benefit', 'game'],
         required: true
     },
     status: {

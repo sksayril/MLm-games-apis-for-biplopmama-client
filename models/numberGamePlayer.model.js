@@ -1,9 +1,9 @@
 const mongoose = require('mongoose');
 
-const gamePlayerSchema = new mongoose.Schema({
+const numberGamePlayerSchema = new mongoose.Schema({
     gameRoomId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'gameRoom',
+        ref: 'numberGameRoom',
         required: true
     },
     userId: {
@@ -11,9 +11,13 @@ const gamePlayerSchema = new mongoose.Schema({
         ref: 'user',
         required: true
     },
-    colorSelected: {
+    numberType: {
         type: String,
-        enum: ['red', 'green', 'blue', 'yellow'],
+        enum: ['big', 'small'],  // big (6-9) or small (1-5)
+        required: true
+    },
+    entryAmount: {
+        type: Number,
         required: true
     },
     hasWon: {
@@ -42,6 +46,6 @@ const gamePlayerSchema = new mongoose.Schema({
 
 // Regular index for query performance without uniqueness constraint
 // This allows a user to join a game room multiple times
-gamePlayerSchema.index({ gameRoomId: 1, userId: 1 });
+numberGamePlayerSchema.index({ gameRoomId: 1, userId: 1 });
 
-module.exports = mongoose.model('gamePlayer', gamePlayerSchema);
+module.exports = mongoose.model('numberGamePlayer', numberGamePlayerSchema);

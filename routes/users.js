@@ -164,6 +164,158 @@ router.get('/wallet', authenticateUser, async (req, res) => {
   }
 });
 
+/* Transfer between wallets */
+router.post('/wallet/transfer', authenticateUser, async (req, res) => {
+  try {
+    const { fromWallet, toWallet, amount } = req.body;
+    
+    // Validate inputs
+    if (!['normal', 'benefit', 'game'].includes(fromWallet) || 
+        !['normal', 'benefit', 'game'].includes(toWallet)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid wallet type. Must be normal, benefit, or game'
+      });
+    }
+    
+    if (fromWallet === toWallet) {
+      return res.status(400).json({
+        success: false,
+        message: 'Source and destination wallets cannot be the same'
+      });
+    }
+    
+    if (!amount || amount <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Amount must be greater than 0'
+      });
+    }
+    
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    
+    try {
+      // Get user with wallet info
+      const user = await User.findById(req.user._id).session(session);
+      
+      // Check if user has sufficient balance
+      if (user.wallet[fromWallet] < amount) {
+        await session.abortTransaction();
+        return res.status(400).json({
+          success: false,
+          message: `Insufficient balance in ${fromWallet} wallet. Available: ${user.wallet[fromWallet]} Rs`
+        });
+      }
+      
+      // Special case: Transfer from normal to game wallet (deduct from benefit wallet too)
+      if (fromWallet === 'normal' && toWallet === 'game') {
+        const benefitDeduction = amount * 2;
+        
+        // Check if benefit wallet has enough
+        if (user.wallet.benefit < benefitDeduction) {
+          await session.abortTransaction();
+          return res.status(400).json({
+            success: false,
+            message: `Insufficient balance in benefit wallet. Required: ${benefitDeduction} Rs, Available: ${user.wallet.benefit} Rs`
+          });
+        }
+        
+        // Deduct from normal wallet
+        user.wallet.normal -= amount;
+        
+        // Deduct from benefit wallet (double amount)
+        user.wallet.benefit -= benefitDeduction;
+        
+        // Add to game wallet
+        user.wallet.game += amount;
+        
+        // Create transaction records
+        const normalTransaction = new Transaction({
+          userId: user._id,
+          amount: -amount,
+          type: 'transfer',
+          walletType: 'normal',
+          description: 'Transfer from normal wallet to game wallet',
+          status: 'completed',
+          transactionDate: new Date()
+        });
+        
+        const benefitTransaction = new Transaction({
+          userId: user._id,
+          amount: -benefitDeduction,
+          type: 'transfer',
+          walletType: 'benefit',
+          description: 'Deduction from benefit wallet for game wallet funding',
+          status: 'completed',
+          transactionDate: new Date()
+        });
+        
+        const gameTransaction = new Transaction({
+          userId: user._id,
+          amount: amount,
+          type: 'transfer',
+          walletType: 'game',
+          description: 'Transfer to game wallet from normal wallet',
+          status: 'completed',
+          transactionDate: new Date()
+        });
+        
+        await normalTransaction.save({session});
+        await benefitTransaction.save({session});
+        await gameTransaction.save({session});
+        
+      } else {
+        // Standard wallet transfer
+        user.wallet[fromWallet] -= amount;
+        user.wallet[toWallet] += amount;
+        
+        // Create transaction records
+        const sourceTransaction = new Transaction({
+          userId: user._id,
+          amount: -amount,
+          type: 'transfer',
+          walletType: fromWallet,
+          description: `Transfer from ${fromWallet} wallet to ${toWallet} wallet`,
+          status: 'completed',
+          transactionDate: new Date()
+        });
+        
+        const destinationTransaction = new Transaction({
+          userId: user._id,
+          amount: amount,
+          type: 'transfer',
+          walletType: toWallet,
+          description: `Transfer to ${toWallet} wallet from ${fromWallet} wallet`,
+          status: 'completed',
+          transactionDate: new Date()
+        });
+        
+        await sourceTransaction.save({session});
+        await destinationTransaction.save({session});
+      }
+      
+      await user.save({session});
+      await session.commitTransaction();
+      
+      res.status(200).json({
+        success: true,
+        message: 'Transfer completed successfully',
+        wallet: user.wallet
+      });
+      
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      session.endSession();
+    }
+    
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+});
+
 /* Get user transactions */
 router.get('/transactions', authenticateUser, async (req, res) => {
   try {

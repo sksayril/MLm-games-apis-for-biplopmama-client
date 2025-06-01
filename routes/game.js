@@ -146,56 +146,36 @@ router.post('/room/join', authenticateUser, async (req, res) => {
         // We are allowing multiple joins by the same user now
         // This is intentional to let users join the same room multiple times
 
-        // Calculate fees for both wallets
-        const normalFee = gameRoom.entryFee;
-        const benefitFee = normalFee * gameRoom.benefitFeeMultiplier;
-
-        // Check if user has enough balance in both wallets
+        // Get entry fee from game room
+        const entryFee = gameRoom.entryFee;
+        
+        // Check if user has enough balance in game wallet
         const user = await User.findById(req.user._id).session(session);
         
-        if (user.wallet.normal < normalFee) {
+        if (user.wallet.game < entryFee) {
             await session.abortTransaction();
             session.endSession();
             return res.status(400).json({ 
                 success: false, 
-                message: `Insufficient balance in your normal wallet. Required: ${normalFee} Rs` 
+                message: `Insufficient balance in your game wallet. Required: ${entryFee} Rs. Please transfer funds from normal wallet to game wallet.` 
             });
         }
 
-        if (user.wallet.benefit < benefitFee) {
-            await session.abortTransaction();
-            session.endSession();
-            return res.status(400).json({ 
-                success: false, 
-                message: `Insufficient balance in your benefit wallet. Required: ${benefitFee} Rs` 
-            });
-        }
-
-        // Deduct entry fee from both wallets
-        user.wallet.normal -= normalFee;
-        user.wallet.benefit -= benefitFee;
+        // Deduct entry fee from game wallet
+        user.wallet.game -= entryFee;
         await user.save({ session });
-
-        // Create transaction records for both wallets
-        const normalTransaction = new Transaction({
+        
+        // Create transaction record for game wallet
+        const gameTransaction = new Transaction({
             userId: user._id,
-            type: 'withdrawal',
-            amount: normalFee,
-            walletType: 'normal',
+            type: 'game',
+            amount: -entryFee,
+            walletType: 'game',
             description: `Entry fee for game room ${gameRoom.roomId}`,
-            status: 'completed'
+            status: 'completed',
+            transactionDate: new Date()
         });
-        await normalTransaction.save({ session });
-
-        const benefitTransaction = new Transaction({
-            userId: user._id,
-            type: 'withdrawal',
-            amount: benefitFee,
-            walletType: 'benefit',
-            description: `Entry fee (benefit wallet) for game room ${gameRoom.roomId}`,
-            status: 'completed'
-        });
-        await benefitTransaction.save({ session });
+        await gameTransaction.save({ session });
 
         // Create player record with payment details
         const player = new GamePlayer({
@@ -203,10 +183,10 @@ router.post('/room/join', authenticateUser, async (req, res) => {
             userId: user._id,
             colorSelected,
             paymentDetails: {
-                normalWalletDeduction: normalFee,
-                benefitWalletDeduction: benefitFee,
-                totalPaid: normalFee + benefitFee
-            }
+                gameWalletDeduction: entryFee,
+                totalPaid: entryFee
+            },
+            joinedAt: new Date()
         });
         await player.save({ session });
 
@@ -277,26 +257,51 @@ router.post('/room/join', authenticateUser, async (req, res) => {
             if (winningPlayers.length > 0) {
                 for (const winningPlayer of winningPlayers) {
                     // Update player record
+                    // Calculate winning amount (additional amount beyond entry fee)
+                    const entryFee = gameRoom.entryFee;
+                    const totalWinAmount = gameRoom.winningAmount;
+                    const additionalWinAmount = totalWinAmount - entryFee; // This is the profit amount
+                    
                     winningPlayer.hasWon = true;
-                    winningPlayer.amountWon = gameRoom.winningAmount;
+                    winningPlayer.amountWon = totalWinAmount; // Record the total win amount
                     await winningPlayer.save({ session });
                     
-                    // Find the winning user and update their wallet
+                    // Find the winning user and update their wallets
                     const winningUser = await User.findById(winningPlayer.userId).session(session);
                     if (winningUser) {
-                        winningUser.wallet.normal += gameRoom.winningAmount;
+                        // Add the additional winning amount to game wallet
+                        winningUser.wallet.game += additionalWinAmount;
+                        
+                        // Return the entry fee to normal wallet
+                        winningUser.wallet.normal += entryFee;
+                        
+                        console.log(`Winner ${winningUser.name}: Entry: ${entryFee}, Total Win: ${totalWinAmount}, Additional Win to Game Wallet: ${additionalWinAmount}, Entry Returned to Normal Wallet: ${entryFee}`);
+                        
                         await winningUser.save({ session });
                         
-                        // Create transaction record for winning amount
+                        // Create transaction record for additional winning amount to game wallet
                         const winTransaction = new Transaction({
                             userId: winningUser._id,
                             type: 'recharge',
-                            amount: gameRoom.winningAmount,
-                            walletType: 'normal',
-                            description: `Won in game room ${gameRoom.roomId}`,
-                            status: 'completed'
+                            amount: additionalWinAmount,
+                            walletType: 'game',
+                            description: `Additional winnings in game room ${gameRoom.roomId}`,
+                            status: 'completed',
+                            transactionDate: new Date()
                         });
                         await winTransaction.save({ session });
+                        
+                        // Create transaction record for returning entry fee to normal wallet
+                        const returnTransaction = new Transaction({
+                            userId: winningUser._id,
+                            type: 'recharge',
+                            amount: entryFee,
+                            walletType: 'normal',
+                            description: `Entry fee returned for winning in game room ${gameRoom.roomId}`,
+                            status: 'completed',
+                            transactionDate: new Date()
+                        });
+                        await returnTransaction.save({ session });
                     }
                 }
             }
@@ -329,7 +334,8 @@ router.post('/room/join', authenticateUser, async (req, res) => {
             },
             remainingBalance: {
                 normal: user.wallet.normal,
-                benefit: user.wallet.benefit
+                benefit: user.wallet.benefit,
+                game: user.wallet.game
             }
         });
     } catch (error) {
@@ -354,8 +360,7 @@ router.get('/history', authenticateUser, async (req, res) => {
                 colorSelected: game.colorSelected,
                 hasWon: game.hasWon,
                 paymentDetails: {
-                    normalWalletDeduction: game.paymentDetails.normalWalletDeduction,
-                    benefitWalletDeduction: game.paymentDetails.benefitWalletDeduction,
+                    gameWalletDeduction: game.paymentDetails.gameWalletDeduction,
                     totalPaid: game.paymentDetails.totalPaid
                 },
                 amountWon: game.amountWon,

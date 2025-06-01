@@ -11,7 +11,9 @@ const indexRouter = require('./routes/index');
 const usersRouter = require('./routes/users');
 const adminRouter = require('./routes/admin');
 const gameRouter = require('./routes/game');
+const numberGameRouter = require('./routes/number-game');
 const adminGameRouter = require('./routes/admin-game');
+const adminNumberGameRouter = require('./routes/admin/number-game');
 
 // Import and start the scheduler for daily wallet growth
 const { startDailyGrowthScheduler } = require('./utilities/scheduler');
@@ -37,7 +39,9 @@ app.use('/', indexRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/game', gameRouter);
+app.use('/api/number-game', numberGameRouter);
 app.use('/api/admin/game', adminGameRouter);
+app.use('/api/admin/number-game', adminNumberGameRouter);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

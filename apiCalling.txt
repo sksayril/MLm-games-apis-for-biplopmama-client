@@ -9,9 +9,10 @@ BASE URL: http://localhost:3100
    - Users can earn from their downline up to 10 levels deep
    - Each user gets a unique referral code for sharing
 
-2. DUAL WALLET SYSTEM:
+2. TRIPLE WALLET SYSTEM:
    - Normal Wallet: For regular transactions and deposits
    - Benefit Wallet: For bonuses and MLM benefits (2x the normal wallet on recharge)
+   - Game Wallet: For playing games (funded by transfers from normal wallet)
 
 3. DAILY GROWTH SYSTEM (200 DAYS):
    - When a user makes a deposit, it grows daily for 200 days
@@ -27,14 +28,32 @@ BASE URL: http://localhost:3100
      * Benefit wallet: 2x the requested amount
    - MLM benefits (1%) are distributed to ancestors
 
-4. COLOR PREDICTION GAME:
-   - Users can join game rooms with an entry fee from both wallets:
-     * Normal wallet: Standard entry fee (default 50 Rs)
-     * Benefit wallet: 2x the normal fee (default 100 Rs)
+5. COLOR PREDICTION GAME:
+   - Users need to transfer funds from normal wallet to game wallet to play games
+   - When transferring from normal to game wallet:
+     * Normal wallet: Deducted by the transfer amount
+     * Benefit wallet: Deducted by 2x the transfer amount
+     * Game wallet: Increased by the transfer amount
+   - Game entry fees are paid from the game wallet only
    - Each room can have up to 20 players (configurable by admin)
    - Players choose from 4 colors: red, green, blue, yellow
    - The winning color is the one with the fewest selections
-   - Winners receive 100 Rs in their normal wallet
+   - Winners receive:
+     * Winning amount in their game wallet
+     * Entry fee is returned to their normal wallet
+
+6. NUMBER PREDICTION GAME:
+   - Admin creates game rooms with configurable:
+     * Entry fee (minimum amount to join)
+     * Winning multiplier (payout ratio)
+     * Maximum players (default 10)
+   - Players can join with any amount from their game wallet
+   - Players predict either "big" (numbers 6-9) or "small" (numbers 1-5)
+   - Game automatically starts when max players join
+   - The side (big/small) with fewer players wins
+   - Winners receive:
+     * Double their entry amount in their game wallet
+     * Entry fee returned to their normal wallet
 
 ================================ USER APIs ================================
 
@@ -92,7 +111,7 @@ BASE URL: http://localhost:3100
        }
      }
 
-3. GET USER PROFILE
+3. GET USER PROFILE (INCLUDES WALLET BALANCES)
    - URL: /api/users/profile
    - Method: GET
    - Headers: 
@@ -153,7 +172,46 @@ BASE URL: http://localhost:3100
        ]
      }
 
-6. GET USER REFERRALS
+8. GET USER WALLET BALANCE
+   - URL: /api/users/wallet
+   - Method: GET
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Response: 
+     {
+       "success": true,
+       "wallet": {
+         "normal": 1000,
+         "benefit": 2000,
+         "game": 500
+       }
+     }
+
+9. TRANSFER BETWEEN WALLETS
+   - URL: /api/users/wallet/transfer
+   - Method: POST
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Body: 
+     {
+       "fromWallet": "normal",  // Can be "normal", "benefit", or "game"
+       "toWallet": "game",     // Can be "normal", "benefit", or "game"
+       "amount": 100
+     }
+   - Special Case: 
+     When transferring from normal to game wallet, benefit wallet is deducted by 2x the amount
+   - Response: 
+     {
+       "success": true,
+       "message": "Transfer completed successfully",
+       "wallet": {
+         "normal": 900,
+         "benefit": 1800,
+         "game": 600
+       }
+     }
+
+10. GET USER REFERRALS
    - URL: /api/users/referrals
    - Method: GET
    - Headers: 
@@ -677,7 +735,294 @@ BASE URL: http://localhost:3100
        }
      }
 
-================================ GAME APIs ================================
+========================= NUMBER PREDICTION GAME APIs ======================
+
+1. GET AVAILABLE NUMBER GAME ROOMS
+   - URL: /api/number-game/rooms
+   - Method: GET
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Response: 
+     {
+       "success": true,
+       "gameRooms": [
+         {
+           "id": "room_id",
+           "roomId": "NUM-ABC123",
+           "entryFee": 50,
+           "winningMultiplier": 2,
+           "maxPlayers": 10,
+           "currentPlayers": 4,
+           "bigPlayers": 3,
+           "smallPlayers": 1,
+           "status": "waiting",
+           "createdAt": "2025-05-29T06:00:00.000Z"
+         }
+       ]
+     }
+
+2. GET NUMBER GAME ROOM DETAILS
+   - URL: /api/number-game/room/:roomId
+   - Method: GET
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Response: 
+     {
+       "success": true,
+       "gameRoom": {
+         "id": "room_id",
+         "roomId": "NUM-ABC123",
+         "entryFee": 50,
+         "winningMultiplier": 2,
+         "maxPlayers": 10,
+         "currentPlayers": 4,
+         "bigPlayers": 3,
+         "smallPlayers": 1,
+         "status": "waiting",
+         "createdAt": "2025-05-29T06:00:00.000Z"
+       },
+       "players": [
+         {
+           "id": "player_id",
+           "user": {
+             "id": "user_id",
+             "name": "User Name",
+             "email": "user@example.com"
+           },
+           "numberType": "big",
+           "entryAmount": 100,
+           "hasWon": false,
+           "joinedAt": "2025-05-29T06:00:00.000Z"
+         }
+       ]
+     }
+
+3. JOIN NUMBER GAME ROOM
+   - URL: /api/number-game/room/join
+   - Method: POST
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Body: 
+     {
+       "roomId": "NUM-ABC123",
+       "numberType": "big",  // Can be "big" or "small"
+       "entryAmount": 100
+     }
+   - Response: 
+     {
+       "success": true,
+       "message": "Successfully joined the number game room",
+       "player": {
+         "id": "player_id",
+         "numberType": "big",
+         "entryAmount": 100,
+         "paymentDetails": {
+           "gameWalletDeduction": 100,
+           "totalPaid": 100
+         }
+       },
+       "gameRoom": {
+         "id": "room_id",
+         "roomId": "NUM-ABC123",
+         "entryFee": 50,
+         "winningMultiplier": 2,
+         "maxPlayers": 10,
+         "currentPlayers": 5,
+         "bigPlayers": 4,
+         "smallPlayers": 1,
+         "status": "waiting",
+         "winningType": null
+       },
+       "remainingBalance": {
+         "normal": 1000,
+         "benefit": 2000,
+         "game": 400
+       }
+     }
+
+4. GET USER'S NUMBER GAME HISTORY
+   - URL: /api/number-game/history
+   - Method: GET
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Response: 
+     {
+       "success": true,
+       "gameHistory": [
+         {
+           "id": "game_id",
+           "roomId": "NUM-ABC123",
+           "numberType": "big",
+           "entryAmount": 100,
+           "hasWon": true,
+           "paymentDetails": {
+             "gameWalletDeduction": 100,
+             "totalPaid": 100
+           },
+           "amountWon": 200,
+           "winningType": "big",
+           "joinedAt": "2025-05-29T06:00:00.000Z",
+           "gameStatus": "completed",
+           "gameEndTime": "2025-05-29T06:15:00.000Z"
+         }
+       ]
+     }
+
+5. ADMIN: CREATE NUMBER GAME ROOM
+   - URL: /api/admin/number-game/room/create
+   - Method: POST
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Body: 
+     {
+       "entryFee": 50,
+       "winningMultiplier": 2,
+       "maxPlayers": 10
+     }
+   - Response: 
+     {
+       "success": true,
+       "message": "Number game room created successfully",
+       "gameRoom": {
+         "id": "room_id",
+         "roomId": "NUM-ABC123",
+         "entryFee": 50,
+         "winningMultiplier": 2,
+         "maxPlayers": 10,
+         "status": "waiting",
+         "createdAt": "2025-05-29T06:00:00.000Z"
+       }
+     }
+
+6. ADMIN: LIST ALL NUMBER GAME ROOMS
+   - URL: /api/admin/number-game/rooms
+   - Method: GET
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Response: 
+     {
+       "success": true,
+       "gameRooms": [
+         {
+           "id": "room_id",
+           "roomId": "NUM-ABC123",
+           "entryFee": 50,
+           "winningMultiplier": 2,
+           "maxPlayers": 10,
+           "currentPlayers": 4,
+           "bigPlayers": 3,
+           "smallPlayers": 1,
+           "status": "waiting",
+           "winningType": null,
+           "startTime": null,
+           "endTime": null,
+           "createdAt": "2025-05-29T06:00:00.000Z"
+         }
+       ]
+     }
+
+7. ADMIN: GET NUMBER GAME ROOM DETAILS WITH PLAYERS
+   - URL: /api/admin/number-game/room/:roomId/details
+   - Method: GET
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Response: 
+     {
+       "success": true,
+       "gameRoom": {
+         "id": "room_id",
+         "roomId": "NUM-ABC123",
+         "entryFee": 50,
+         "winningMultiplier": 2,
+         "maxPlayers": 10,
+         "currentPlayers": 4,
+         "bigPlayers": 3,
+         "smallPlayers": 1,
+         "status": "waiting",
+         "winningType": null,
+         "startTime": null,
+         "endTime": null,
+         "createdAt": "2025-05-29T06:00:00.000Z"
+       },
+       "players": [
+         {
+           "id": "player_id",
+           "user": {
+             "id": "user_id",
+             "name": "User Name",
+             "email": "user@example.com",
+             "wallet": {
+               "normal": 1000,
+               "benefit": 2000,
+               "game": 400
+             }
+           },
+           "numberType": "big",
+           "entryAmount": 100,
+           "hasWon": false,
+           "amountWon": 0,
+           "joinedAt": "2025-05-29T06:00:00.000Z"
+         }
+       ]
+     }
+
+8. ADMIN: CLOSE NUMBER GAME ROOM MANUALLY
+   - URL: /api/admin/number-game/room/:roomId/close
+   - Method: POST
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Response: 
+     {
+       "success": true,
+       "message": "Game room closed successfully",
+       "gameRoom": {
+         "id": "room_id",
+         "roomId": "NUM-ABC123",
+         "status": "completed",
+         "winningType": "small",
+         "winningPlayers": 2,
+         "endTime": "2025-05-29T06:15:00.000Z"
+       }
+     }
+
+9. ADMIN: UPDATE NUMBER GAME ROOM SETTINGS
+   - URL: /api/admin/number-game/room/:roomId
+   - Method: PUT
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Body: 
+     {
+       "entryFee": 75,
+       "winningMultiplier": 2.5,
+       "maxPlayers": 15
+     }
+   - Response: 
+     {
+       "success": true,
+       "message": "Game room updated successfully",
+       "gameRoom": {
+         "id": "room_id",
+         "roomId": "NUM-ABC123",
+         "entryFee": 75,
+         "winningMultiplier": 2.5,
+         "maxPlayers": 15,
+         "currentPlayers": 4,
+         "status": "waiting"
+       }
+     }
+
+10. ADMIN: DELETE NUMBER GAME ROOM
+    - URL: /api/admin/number-game/room/:roomId
+    - Method: DELETE
+    - Headers: 
+      Authorization: Bearer jwt_token
+    - Response: 
+      {
+        "success": true,
+        "message": "Game room deleted successfully"
+      }
+
+============================= COLOR PREDICTION GAME APIs ================================
 
 1. GET AVAILABLE GAME ROOMS (USER)
    - URL: /api/game/rooms
@@ -785,8 +1130,9 @@ BASE URL: http://localhost:3100
          "status": "waiting"
        },
        "remainingBalance": {
-         "normal": 950,
-         "benefit": 1900
+         "normal": 1000,
+         "benefit": 2000,
+         "game": 400
        }
      }
 
@@ -805,9 +1151,8 @@ BASE URL: http://localhost:3100
            "colorSelected": "red",
            "hasWon": true,
            "paymentDetails": {
-             "normalWalletDeduction": 50,
-             "benefitWalletDeduction": 100,
-             "totalPaid": 150
+             "gameWalletDeduction": 50,
+             "totalPaid": 50
            },
            "amountWon": 100,
            "winningColor": "red",

@@ -26,6 +26,10 @@ let schema = new mongoose.Schema({
         benefit: {
             type: Number,
             default: 0
+        },
+        game: {
+            type: Number,
+            default: 0
         }
     },
     referralCode: {

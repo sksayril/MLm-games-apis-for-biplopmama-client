@@ -9,6 +9,7 @@ const User = require('../models/user.model');
 const Transaction = require('../models/transaction.model');
 const Deposit = require('../models/deposit.model');
 const DepositRequest = require('../models/depositRequest.model');
+const Withdrawal = require('../models/withdrawal.model');
 const { authenticateAdmin } = require('../middleware/auth');
 
 /* Admin Registration (accessible only internally or by superadmin) */
@@ -571,6 +572,237 @@ router.post('/deposit-request/:id/reject', authenticateAdmin, async (req, res) =
         rejectionReason: depositRequest.rejectionReason
       }
     });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+});
+
+/* Get all withdrawal requests */
+router.get('/withdrawals', authenticateAdmin, async (req, res) => {
+  try {
+    const { status } = req.query;
+    
+    // Build filter based on query parameters
+    const filter = {};
+    if (status) {
+      filter.status = status;
+    }
+    
+    const withdrawals = await Withdrawal.find(filter)
+      .sort({ createdAt: -1 })
+      .populate('userId', 'name email')
+      .populate('processedBy', 'name email');
+    
+    res.status(200).json({
+      success: true,
+      count: withdrawals.length,
+      withdrawals: withdrawals.map(withdrawal => ({
+        id: withdrawal._id,
+        userId: withdrawal.userId,
+        userEmail: withdrawal.userId ? withdrawal.userId.email : null,
+        userName: withdrawal.userId ? withdrawal.userId.name : null,
+        amount: withdrawal.amount,
+        upiId: withdrawal.upiId,
+        status: withdrawal.status,
+        remarks: withdrawal.remarks,
+        processedBy: withdrawal.processedBy,
+        processedAt: withdrawal.processedAt,
+        createdAt: withdrawal.createdAt
+      }))
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+});
+
+/* Get a specific withdrawal request */
+router.get('/withdrawal/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const withdrawal = await Withdrawal.findById(req.params.id)
+      .populate('userId', 'name email wallet')
+      .populate('processedBy', 'name email');
+    
+    if (!withdrawal) {
+      return res.status(404).json({ success: false, message: 'Withdrawal request not found' });
+    }
+    
+    res.status(200).json({
+      success: true,
+      withdrawal: {
+        id: withdrawal._id,
+        user: {
+          id: withdrawal.userId._id,
+          name: withdrawal.userId.name,
+          email: withdrawal.userId.email,
+          wallet: withdrawal.userId.wallet
+        },
+        amount: withdrawal.amount,
+        upiId: withdrawal.upiId,
+        status: withdrawal.status,
+        remarks: withdrawal.remarks,
+        processedBy: withdrawal.processedBy,
+        processedAt: withdrawal.processedAt,
+        createdAt: withdrawal.createdAt
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+});
+
+/* Approve a withdrawal request */
+router.post('/withdrawal/:id/approve', authenticateAdmin, async (req, res) => {
+  try {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    
+    try {
+      const withdrawal = await Withdrawal.findById(req.params.id).session(session);
+      
+      if (!withdrawal) {
+        await session.abortTransaction();
+        return res.status(404).json({ success: false, message: 'Withdrawal request not found' });
+      }
+      
+      if (withdrawal.status !== 'pending') {
+        await session.abortTransaction();
+        return res.status(400).json({ 
+          success: false, 
+          message: `This withdrawal request has already been ${withdrawal.status}` 
+        });
+      }
+      
+      // Update withdrawal request status
+      withdrawal.status = 'approved';
+      withdrawal.processedBy = req.admin._id;
+      withdrawal.processedAt = new Date();
+      withdrawal.remarks = req.body.remarks || 'Approved by admin';
+      
+      await withdrawal.save({ session });
+      
+      // Find related transaction and mark as completed
+      const transaction = await Transaction.findOneAndUpdate(
+        { userId: withdrawal.userId, type: 'withdrawal', status: 'pending', amount: withdrawal.amount },
+        { status: 'completed', description: 'Withdrawal request approved' },
+        { new: true, session }
+      );
+      
+      await session.commitTransaction();
+      
+      res.status(200).json({
+        success: true,
+        message: 'Withdrawal request approved successfully',
+        withdrawal: {
+          id: withdrawal._id,
+          status: 'approved',
+          processedBy: req.admin._id,
+          processedAt: withdrawal.processedAt
+        },
+        transaction: transaction ? {
+          id: transaction._id,
+          status: transaction.status
+        } : null
+      });
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      session.endSession();
+    }
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+});
+
+/* Reject a withdrawal request */
+router.post('/withdrawal/:id/reject', authenticateAdmin, async (req, res) => {
+  try {
+    const { reason } = req.body;
+    if (!reason) {
+      return res.status(400).json({ success: false, message: 'Rejection reason is required' });
+    }
+    
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    
+    try {
+      const withdrawal = await Withdrawal.findById(req.params.id).session(session);
+      
+      if (!withdrawal) {
+        await session.abortTransaction();
+        return res.status(404).json({ success: false, message: 'Withdrawal request not found' });
+      }
+      
+      if (withdrawal.status !== 'pending') {
+        await session.abortTransaction();
+        return res.status(400).json({ 
+          success: false, 
+          message: `This withdrawal request has already been ${withdrawal.status}` 
+        });
+      }
+      
+      // Get the user
+      const user = await User.findById(withdrawal.userId).session(session);
+      
+      if (!user) {
+        await session.abortTransaction();
+        return res.status(404).json({ success: false, message: 'User not found' });
+      }
+      
+      // Refund the amount back to game wallet
+      user.wallet.game += withdrawal.amount;
+      await user.save({ session });
+      
+      // Update withdrawal request status
+      withdrawal.status = 'rejected';
+      withdrawal.processedBy = req.admin._id;
+      withdrawal.processedAt = new Date();
+      withdrawal.remarks = reason || 'Rejected by admin';
+      
+      await withdrawal.save({ session });
+      
+      // Find related transaction and mark as cancelled
+      const transaction = await Transaction.findOneAndUpdate(
+        { userId: withdrawal.userId, type: 'withdrawal', status: 'pending', amount: withdrawal.amount },
+        { status: 'cancelled', description: `Withdrawal request rejected: ${reason}` },
+        { new: true, session }
+      );
+      
+      // Create a refund transaction
+      const refundTransaction = new Transaction({
+        userId: user._id,
+        amount: withdrawal.amount,
+        type: 'refund',
+        walletType: 'game',
+        description: 'Refund for rejected withdrawal request',
+        status: 'completed',
+        performedBy: req.admin._id
+      });
+      
+      await refundTransaction.save({ session });
+      
+      await session.commitTransaction();
+      
+      res.status(200).json({
+        success: true,
+        message: 'Withdrawal request rejected and amount refunded',
+        withdrawal: {
+          id: withdrawal._id,
+          status: 'rejected',
+          processedBy: req.admin._id,
+          processedAt: withdrawal.processedAt,
+          remarks: withdrawal.remarks
+        },
+        updatedWallet: {
+          game: user.wallet.game
+        }
+      });
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      session.endSession();
+    }
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }

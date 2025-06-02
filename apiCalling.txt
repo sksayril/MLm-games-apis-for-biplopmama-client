@@ -14,11 +14,13 @@ BASE URL: http://localhost:3100
    - Benefit Wallet: For bonuses and MLM benefits (2x the normal wallet on recharge)
    - Game Wallet: For playing games (funded by transfers from normal wallet)
 
-3. DAILY GROWTH SYSTEM (200 DAYS):
-   - When a user makes a deposit, it grows daily for 200 days
+3. DAILY GROWTH SYSTEM (400 DAYS):
+   - When a user makes a deposit, it grows daily for 400 days
    - Normal wallet grows at 5% of deposit amount daily
    - Benefit wallet grows at 10% of deposit amount daily
-   - Growth stops automatically after 200 days
+   - Normal wallet balance grows by 2% of its value daily
+   - Benefit wallet balance grows by 4% of its value daily
+   - Growth stops automatically after 400 days
 
 4. DEPOSIT REQUEST SYSTEM:
    - Users send deposit requests to admins
@@ -416,6 +418,73 @@ BASE URL: http://localhost:3100
        }
      }
 
+15. CREATE WITHDRAWAL REQUEST
+   - URL: /api/users/withdrawal
+   - Method: POST
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Body: 
+     {
+       "amount": 500,
+       "upiId": "user@upi"
+     }
+   - Response: 
+     {
+       "success": true,
+       "message": "Withdrawal request created successfully. Waiting for admin approval.",
+       "withdrawal": {
+         "id": "withdrawal_id",
+         "amount": 500,
+         "upiId": "user@upi",
+         "status": "pending",
+         "createdAt": "2025-06-02T12:30:00.000Z"
+       }
+     }
+   - Notes:
+     * Minimum withdrawal amount is 500
+     * Amount is deducted from game wallet immediately
+     * Withdrawal requests need admin approval
+
+16. GET ALL USER WITHDRAWAL REQUESTS
+   - URL: /api/users/withdrawals
+   - Method: GET
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Response: 
+     {
+       "success": true,
+       "withdrawals": [
+         {
+           "id": "withdrawal_id",
+           "amount": 500,
+           "upiId": "user@upi",
+           "status": "pending",
+           "remarks": "",
+           "createdAt": "2025-06-02T12:30:00.000Z",
+           "processedAt": null
+         }
+       ]
+     }
+
+17. GET SPECIFIC WITHDRAWAL REQUEST
+   - URL: /api/users/withdrawal/:id
+   - Method: GET
+   - Headers: 
+     Authorization: Bearer jwt_token
+   - Response: 
+     {
+       "success": true,
+       "withdrawal": {
+         "id": "withdrawal_id",
+         "amount": 500,
+         "upiId": "user@upi",
+         "status": "pending",
+         "remarks": "",
+         "createdAt": "2025-06-02T12:30:00.000Z",
+         "processedAt": null
+       }
+     }
+
 ================================ ADMIN APIs ================================
 
 1. REGISTER ADMIN (Internal or by superadmin)
@@ -717,10 +786,10 @@ BASE URL: http://localhost:3100
    - URL: /api/admin/deposit-request/:id/reject
    - Method: POST
    - Headers: 
-     Authorization: Bearer jwt_token
+     Authorization: Bearer jwt_token (admin token)
    - Body: 
      {
-       "reason": "Invalid payment proof" (optional)
+       "reason": "Invalid payment proof"
      }
    - Response: 
      {
@@ -735,11 +804,122 @@ BASE URL: http://localhost:3100
        }
      }
 
+14. GET ALL WITHDRAWAL REQUESTS
+   - URL: /api/admin/withdrawals
+   - Method: GET
+   - Headers: 
+     Authorization: Bearer jwt_token (admin token)
+   - Query Parameters:
+     status: pending|approved|rejected (optional)
+   - Response: 
+     {
+       "success": true,
+       "count": 2,
+       "withdrawals": [
+         {
+           "id": "withdrawal_id",
+           "userId": "user_id",
+           "userName": "User Name",
+           "userEmail": "user@example.com",
+           "amount": 500,
+           "upiId": "user@upi",
+           "status": "pending",
+           "remarks": "",
+           "processedBy": null,
+           "processedAt": null,
+           "createdAt": "2025-06-02T12:30:00.000Z"
+         }
+       ]
+     }
+
+15. GET SPECIFIC WITHDRAWAL REQUEST
+   - URL: /api/admin/withdrawal/:id
+   - Method: GET
+   - Headers: 
+     Authorization: Bearer jwt_token (admin token)
+   - Response: 
+     {
+       "success": true,
+       "withdrawal": {
+         "id": "withdrawal_id",
+         "user": {
+           "id": "user_id",
+           "name": "User Name",
+           "email": "user@example.com",
+           "wallet": {
+             "normal": 1000,
+             "benefit": 2000,
+             "game": 500
+           }
+         },
+         "amount": 500,
+         "upiId": "user@upi",
+         "status": "pending",
+         "remarks": "",
+         "processedBy": null,
+         "processedAt": null,
+         "createdAt": "2025-06-02T12:30:00.000Z"
+       }
+     }
+
+16. APPROVE WITHDRAWAL REQUEST
+   - URL: /api/admin/withdrawal/:id/approve
+   - Method: POST
+   - Headers: 
+     Authorization: Bearer jwt_token (admin token)
+   - Body: 
+     {
+       "remarks": "Payment processed via UPI" (optional)
+     }
+   - Response: 
+     {
+       "success": true,
+       "message": "Withdrawal request approved successfully",
+       "withdrawal": {
+         "id": "withdrawal_id",
+         "status": "approved",
+         "processedBy": "admin_id",
+         "processedAt": "2025-06-02T14:00:00.000Z"
+       },
+       "transaction": {
+         "id": "transaction_id",
+         "status": "completed"
+       }
+     }
+
+17. REJECT WITHDRAWAL REQUEST
+   - URL: /api/admin/withdrawal/:id/reject
+   - Method: POST
+   - Headers: 
+     Authorization: Bearer jwt_token (admin token)
+   - Body: 
+     {
+       "reason": "Invalid UPI ID provided"
+     }
+   - Response: 
+     {
+       "success": true,
+       "message": "Withdrawal request rejected and amount refunded",
+       "withdrawal": {
+         "id": "withdrawal_id",
+         "status": "rejected",
+         "processedBy": "admin_id",
+         "processedAt": "2025-06-02T14:00:00.000Z",
+         "remarks": "Invalid UPI ID provided"
+       },
+       "updatedWallet": {
+         "game": 1000
+       }
+     }
+   - Notes: 
+     * When a withdrawal is rejected, the amount is refunded to the user's game wallet
+
 ========================= NUMBER PREDICTION GAME APIs ======================
 
 1. GET AVAILABLE NUMBER GAME ROOMS
    - URL: /api/number-game/rooms
    - Method: GET
+{{ ... }}
    - Headers: 
      Authorization: Bearer jwt_token
    - Response: 

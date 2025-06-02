@@ -257,35 +257,33 @@ router.post('/room/join', authenticateUser, async (req, res) => {
             if (winningPlayers.length > 0) {
                 for (const winningPlayer of winningPlayers) {
                     // Update player record
-                    // Calculate winning amount (additional amount beyond entry fee)
+                    // Get entry amount
                     const entryFee = gameRoom.entryFee;
-                    const totalWinAmount = gameRoom.winningAmount;
-                    const additionalWinAmount = totalWinAmount - entryFee; // This is the profit amount
+                    // For winning users, they should get an equal amount to their entry fee as winnings
+                    const winAmount = entryFee; // Equal amount as entry fee
                     
                     winningPlayer.hasWon = true;
-                    winningPlayer.amountWon = totalWinAmount; // Record the total win amount
+                    winningPlayer.amountWon = winAmount;
                     await winningPlayer.save({ session });
                     
                     // Find the winning user and update their wallets
                     const winningUser = await User.findById(winningPlayer.userId).session(session);
                     if (winningUser) {
-                        // Add the additional winning amount to game wallet
-                        winningUser.wallet.game += additionalWinAmount;
+                        // Add the winning amount to game wallet (equal to entry amount)
+                        winningUser.wallet.game += winAmount;
                         
                         // Return the entry fee to normal wallet
                         winningUser.wallet.normal += entryFee;
                         
-                        console.log(`Winner ${winningUser.name}: Entry: ${entryFee}, Total Win: ${totalWinAmount}, Additional Win to Game Wallet: ${additionalWinAmount}, Entry Returned to Normal Wallet: ${entryFee}`);
-                        
                         await winningUser.save({ session });
                         
-                        // Create transaction record for additional winning amount to game wallet
+                        // Create transaction record for winning amount to game wallet
                         const winTransaction = new Transaction({
                             userId: winningUser._id,
                             type: 'recharge',
-                            amount: additionalWinAmount,
+                            amount: winAmount,
                             walletType: 'game',
-                            description: `Additional winnings in game room ${gameRoom.roomId}`,
+                            description: `Winning amount in game room ${gameRoom.roomId}`,
                             status: 'completed',
                             transactionDate: new Date()
                         });

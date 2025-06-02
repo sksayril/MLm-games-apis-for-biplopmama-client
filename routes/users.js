@@ -9,6 +9,7 @@ const User = require('../models/user.model');
 const Transaction = require('../models/transaction.model');
 const Deposit = require('../models/deposit.model');
 const DepositRequest = require('../models/depositRequest.model');
+const Withdrawal = require('../models/withdrawal.model');
 const { authenticateUser } = require('../middleware/auth');
 const { triggerGrowthCalculation } = require('../utilities/scheduler');
 
@@ -668,6 +669,144 @@ router.get('/deposit-request/:id', authenticateUser, async (req, res) => {
         rejectionReason: depositRequest.rejectionReason,
         notes: depositRequest.notes,
         transaction: depositRequest.transactionId
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+});
+
+/* Create a withdrawal request */
+router.post('/withdrawal', authenticateUser, async (req, res) => {
+  try {
+    const { amount, upiId } = req.body;
+    
+    // Validate input
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ success: false, message: 'Valid amount is required' });
+    }
+    
+    if (!upiId || upiId.trim() === '') {
+      return res.status(400).json({ success: false, message: 'Valid UPI ID is required' });
+    }
+    
+    // Minimum withdrawal amount requirement
+    if (amount < 500) {
+      return res.status(400).json({ success: false, message: 'Minimum withdrawal amount is 500' });
+    }
+    
+    // Get user with wallet info
+    const user = await User.findById(req.user._id);
+    
+    // Check if user has sufficient balance in game wallet
+    if (user.wallet.game < amount) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Insufficient balance in game wallet. Available: ${user.wallet.game} Rs` 
+      });
+    }
+    
+    // Create a session for transaction
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    
+    try {
+      // Deduct amount from game wallet
+      user.wallet.game -= amount;
+      await user.save({ session });
+      
+      // Record the transaction
+      const transaction = new Transaction({
+        userId: user._id,
+        amount: amount,
+        type: 'withdrawal',
+        walletType: 'game',
+        description: 'Withdrawal request from game wallet',
+        status: 'pending',
+        transactionDate: new Date()
+      });
+      
+      await transaction.save({ session });
+      
+      // Create withdrawal request
+      const withdrawalRequest = new Withdrawal({
+        userId: req.user._id,
+        amount: Number(amount),
+        upiId: upiId,
+        status: 'pending'
+      });
+      
+      await withdrawalRequest.save({ session });
+      
+      await session.commitTransaction();
+      
+      res.status(201).json({
+        success: true,
+        message: 'Withdrawal request created successfully. Waiting for admin approval.',
+        withdrawal: {
+          id: withdrawalRequest._id,
+          amount: withdrawalRequest.amount,
+          upiId: withdrawalRequest.upiId,
+          status: withdrawalRequest.status,
+          createdAt: withdrawalRequest.createdAt
+        }
+      });
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      session.endSession();
+    }
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+});
+
+/* Get all withdrawal requests for the current user */
+router.get('/withdrawals', authenticateUser, async (req, res) => {
+  try {
+    const withdrawals = await Withdrawal.find({ userId: req.user._id })
+      .sort({ createdAt: -1 });
+    
+    res.status(200).json({
+      success: true,
+      withdrawals: withdrawals.map(withdrawal => ({
+        id: withdrawal._id,
+        amount: withdrawal.amount,
+        upiId: withdrawal.upiId,
+        status: withdrawal.status,
+        remarks: withdrawal.remarks,
+        createdAt: withdrawal.createdAt,
+        processedAt: withdrawal.processedAt
+      }))
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+});
+
+/* Get a specific withdrawal request */
+router.get('/withdrawal/:id', authenticateUser, async (req, res) => {
+  try {
+    const withdrawal = await Withdrawal.findOne({
+      _id: req.params.id,
+      userId: req.user._id
+    });
+    
+    if (!withdrawal) {
+      return res.status(404).json({ success: false, message: 'Withdrawal request not found' });
+    }
+    
+    res.status(200).json({
+      success: true,
+      withdrawal: {
+        id: withdrawal._id,
+        amount: withdrawal.amount,
+        upiId: withdrawal.upiId,
+        status: withdrawal.status,
+        remarks: withdrawal.remarks,
+        createdAt: withdrawal.createdAt,
+        processedAt: withdrawal.processedAt
       }
     });
   } catch (error) {

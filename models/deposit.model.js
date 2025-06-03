@@ -19,7 +19,7 @@ const depositSchema = new mongoose.Schema({
         // Set default to 200 days from now
         default: function() {
             const date = new Date();
-            date.setDate(date.getDate() + 200);
+            date.setDate(date.getDate() + 400);
             return date;
         }
     },

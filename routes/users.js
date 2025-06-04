@@ -82,46 +82,8 @@ router.post('/register', async (req, res) => {
           
           newUser.ancestors = ancestors;
           
-          // Save the new user first to get an ID
+          // Simply save the user with referral info, no initial bonus
           await newUser.save({ session });
-          
-          // Process instant referral bonus - give referrer 10% of initial amount
-          const INITIAL_BONUS_AMOUNT = 100; // You can adjust this amount as needed
-          
-          // Give the new user some initial amount
-          newUser.wallet.normal += INITIAL_BONUS_AMOUNT;
-          await newUser.save({ session });
-          
-          // Create transaction record for initial bonus
-          const initialBonusTransaction = new Transaction({
-            userId: newUser._id,
-            type: 'signup_bonus',
-            amount: INITIAL_BONUS_AMOUNT,
-            walletType: 'normal',
-            description: `Signup bonus`,
-            status: 'completed'
-          });
-          await initialBonusTransaction.save({ session });
-          
-          // Process the referral bonus (10% of initial amount)
-          const referralBonusAmount = INITIAL_BONUS_AMOUNT * 0.1;
-          
-          // Add bonus to referrer's wallet
-          referrer.wallet.normal += referralBonusAmount;
-          await referrer.save({ session });
-          
-          // Create transaction record for referral bonus
-          const referralTransaction = new Transaction({
-            userId: referrer._id,
-            type: 'referral_bonus',
-            amount: referralBonusAmount,
-            walletType: 'normal',
-            description: `Referral bonus for new user ${newUser.name}`,
-            status: 'completed',
-            relatedUser: newUser._id
-          });
-          
-          await referralTransaction.save({ session });
         }
       } else {
         // No referral code, just save the user
@@ -558,6 +520,10 @@ router.post('/deposit', authenticateUser, async (req, res) => {
     session.startTransaction();
     
     try {
+      // Check if this is the user's first deposit
+      const existingDeposits = await Deposit.countDocuments({ userId: req.user._id });
+      const isFirstDeposit = existingDeposits === 0;
+      
       // Create the deposit record
       const deposit = new Deposit({
         userId: req.user._id,
@@ -574,10 +540,36 @@ router.post('/deposit', authenticateUser, async (req, res) => {
       user.wallet.normal += Number(amount);
       await user.save({ session });
       
-      // Create transaction record
+      // Process referral bonus if this is the user's first deposit and user has a referrer
+      if (isFirstDeposit && user.referredBy) {
+        const referrer = await User.findById(user.referredBy).session(session);
+        if (referrer) {
+          // Calculate 6% referral bonus
+          const referralBonusAmount = Number(amount) * 0.06;
+          
+          // Add bonus to referrer's normal wallet
+          referrer.wallet.normal += referralBonusAmount;
+          await referrer.save({ session });
+          
+          // Create transaction record for referral bonus
+          const referralTransaction = new Transaction({
+            userId: referrer._id,
+            type: 'referral_bonus',
+            amount: referralBonusAmount,
+            walletType: 'normal',
+            description: `Referral bonus (6%) from ${user.name || user.email}'s first deposit of ${amount}`,
+            status: 'completed',
+            transactionDate: new Date()
+          });
+          
+          await referralTransaction.save({ session });
+        }
+      }
+      
+      // Create transaction record for the deposit
       const transaction = new Transaction({
         userId: req.user._id,
-        type: 'deposit',
+        type: 'recharge',
         amount: Number(amount),
         walletType: 'normal',
         description: 'Wallet deposit for growth',

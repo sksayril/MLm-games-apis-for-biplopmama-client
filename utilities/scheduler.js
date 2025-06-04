@@ -3,6 +3,7 @@ const User = require('../models/user.model');
 const Deposit = require('../models/deposit.model');
 const Transaction = require('../models/transaction.model');
 const mongoose = require('mongoose');
+const { ObjectId } = mongoose.Types;
 
 // Function to calculate and apply daily growth to user wallets
 const calculateDailyGrowth = async () => {
@@ -30,9 +31,24 @@ const calculateDailyGrowth = async () => {
             // Calculate 4% growth for benefit wallet based on current balance
             const benefitWalletGrowth = user.wallet.benefit * 0.04;
             
+            // Calculate daily transfers to withdrawal wallet
+            // 0.5% from normal wallet to withdrawal wallet
+            const normalToWithdrawalAmount = user.wallet.normal * 0.005;
+            
+            // 1% from benefit wallet to withdrawal wallet
+            const benefitToWithdrawalAmount = user.wallet.benefit * 0.01;
+            
+            // Calculate withdrawal wallet growth (0.5% per day, only if daysGrown < 400)
+            let withdrawalWalletGrowth = 0;
+            if (user.wallet.withdrawalDaysGrown < 400) {
+                withdrawalWalletGrowth = user.wallet.withdrawal * 0.005;
+                user.wallet.withdrawalDaysGrown += 1;
+            }
+            
             // Update user's wallets
-            user.wallet.normal += normalWalletGrowth;
-            user.wallet.benefit += benefitWalletGrowth;
+            user.wallet.normal += normalWalletGrowth - normalToWithdrawalAmount;
+            user.wallet.benefit += benefitWalletGrowth - benefitToWithdrawalAmount;
+            user.wallet.withdrawal += normalToWithdrawalAmount + benefitToWithdrawalAmount + withdrawalWalletGrowth;
             
             // Save changes
             await user.save({ session });
@@ -62,7 +78,46 @@ const calculateDailyGrowth = async () => {
                 await benefitTransaction.save({ session });
             }
             
-            console.log(`Processed wallet growth for user ${user._id}: Normal +${normalWalletGrowth}, Benefit +${benefitWalletGrowth}`);
+            if (normalToWithdrawalAmount > 0) {
+                const normalToWithdrawalTransaction = new Transaction({
+                    userId: user._id,
+                    type: 'transfer',
+                    amount: normalToWithdrawalAmount,
+                    walletType: 'normal',
+                    toWalletType: 'withdrawal',
+                    description: `Daily transfer (0.5%) from normal wallet to withdrawal wallet`,
+                    status: 'completed'
+                });
+                await normalToWithdrawalTransaction.save({ session });
+            }
+            
+            if (benefitToWithdrawalAmount > 0) {
+                const benefitToWithdrawalTransaction = new Transaction({
+                    userId: user._id,
+                    type: 'transfer',
+                    amount: benefitToWithdrawalAmount,
+                    walletType: 'benefit',
+                    toWalletType: 'withdrawal',
+                    description: `Daily transfer (1%) from benefit wallet to withdrawal wallet`,
+                    status: 'completed'
+                });
+                await benefitToWithdrawalTransaction.save({ session });
+            }
+            
+            if (withdrawalWalletGrowth > 0) {
+                const withdrawalGrowthTransaction = new Transaction({
+                    userId: user._id,
+                    type: 'bonus',
+                    amount: withdrawalWalletGrowth,
+                    walletType: 'withdrawal',
+                    description: `Daily growth (0.5%) on withdrawal wallet balance (day ${user.wallet.withdrawalDaysGrown} of 400)`,
+                    status: 'completed'
+                });
+                await withdrawalGrowthTransaction.save({ session });
+            }
+            
+            console.log(`Processed wallet growth for user ${user._id}: Normal +${normalWalletGrowth}, Benefit +${benefitWalletGrowth}, Withdrawal +${withdrawalWalletGrowth}`);
+            console.log(`Daily transfers to withdrawal wallet: From normal ${normalToWithdrawalAmount}, From benefit ${benefitToWithdrawalAmount}`);
         }
         
         // Process deposit-based growth

@@ -30,6 +30,14 @@ let schema = new mongoose.Schema({
         game: {
             type: Number,
             default: 0
+        },
+        withdrawal: {
+            type: Number,
+            default: 0
+        },
+        withdrawalDaysGrown: {
+            type: Number,
+            default: 0
         }
     },
     referralCode: {

@@ -12,6 +12,7 @@ const DepositRequest = require('../models/depositRequest.model');
 const Withdrawal = require('../models/withdrawal.model');
 const { authenticateUser } = require('../middleware/auth');
 const { triggerGrowthCalculation } = require('../utilities/scheduler');
+const { processInstantReferralBonus } = require('../utilities/withdrawalHandler');
 
 // Generate unique referral code
 const generateReferralCode = () => {
@@ -45,40 +46,95 @@ router.post('/register', async (req, res) => {
       level: 0
     });
 
-    // If user signed up with a referral code
-    if (referralCode) {
-      const referrer = await User.findOne({ referralCode });
-      if (referrer) {
-        // Set referrer
-        newUser.referredBy = referrer._id;
-        newUser.level = 1;
-        
-        // Build the ancestor list (up to 10 levels)
-        const ancestors = [];
-        
-        // Add direct referrer as level 1
-        ancestors.push({ userId: referrer._id, level: 1 });
-        
-        // Get referrer's ancestors and increment their level
-        if (referrer.ancestors && referrer.ancestors.length > 0) {
-          const referrerAncestors = referrer.ancestors;
+    // Create a session for transaction
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    
+    try {
+      // If user signed up with a referral code
+      if (referralCode) {
+        const referrer = await User.findOne({ referralCode }).session(session);
+        if (referrer) {
+          // Set referrer
+          newUser.referredBy = referrer._id;
+          newUser.level = 1;
           
-          for (const ancestor of referrerAncestors) {
-            // Only add ancestors up to level 9 (so they become level 10 for the new user)
-            if (ancestor.level < 10) {
-              ancestors.push({ 
-                userId: ancestor.userId, 
-                level: ancestor.level + 1 
-              });
+          // Build the ancestor list (up to 10 levels)
+          const ancestors = [];
+          
+          // Add direct referrer as level 1
+          ancestors.push({ userId: referrer._id, level: 1 });
+          
+          // Get referrer's ancestors and increment their level
+          if (referrer.ancestors && referrer.ancestors.length > 0) {
+            const referrerAncestors = referrer.ancestors;
+            
+            for (const ancestor of referrerAncestors) {
+              // Only add ancestors up to level 9 (so they become level 10 for the new user)
+              if (ancestor.level < 10) {
+                ancestors.push({ 
+                  userId: ancestor.userId, 
+                  level: ancestor.level + 1 
+                });
+              }
             }
           }
+          
+          newUser.ancestors = ancestors;
+          
+          // Save the new user first to get an ID
+          await newUser.save({ session });
+          
+          // Process instant referral bonus - give referrer 10% of initial amount
+          const INITIAL_BONUS_AMOUNT = 100; // You can adjust this amount as needed
+          
+          // Give the new user some initial amount
+          newUser.wallet.normal += INITIAL_BONUS_AMOUNT;
+          await newUser.save({ session });
+          
+          // Create transaction record for initial bonus
+          const initialBonusTransaction = new Transaction({
+            userId: newUser._id,
+            type: 'signup_bonus',
+            amount: INITIAL_BONUS_AMOUNT,
+            walletType: 'normal',
+            description: `Signup bonus`,
+            status: 'completed'
+          });
+          await initialBonusTransaction.save({ session });
+          
+          // Process the referral bonus (10% of initial amount)
+          const referralBonusAmount = INITIAL_BONUS_AMOUNT * 0.1;
+          
+          // Add bonus to referrer's wallet
+          referrer.wallet.normal += referralBonusAmount;
+          await referrer.save({ session });
+          
+          // Create transaction record for referral bonus
+          const referralTransaction = new Transaction({
+            userId: referrer._id,
+            type: 'referral_bonus',
+            amount: referralBonusAmount,
+            walletType: 'normal',
+            description: `Referral bonus for new user ${newUser.name}`,
+            status: 'completed',
+            relatedUser: newUser._id
+          });
+          
+          await referralTransaction.save({ session });
         }
-        
-        newUser.ancestors = ancestors;
+      } else {
+        // No referral code, just save the user
+        await newUser.save({ session });
       }
+      
+      await session.commitTransaction();
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      session.endSession();
     }
-
-    await newUser.save();
 
     // Generate JWT token
     const token = jwt.sign({ id: newUser._id }, process.env.JWT_SECRET, { expiresIn: '7d' });

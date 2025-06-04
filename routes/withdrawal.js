@@ -2,11 +2,11 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/user.model');
 const Transaction = require('../models/transaction.model');
-const auth = require('../middleware/auth');
+const { authenticateUser, isAdmin } = require('../middleware/auth');
 const { processWithdrawal, processInstantReferralBonus } = require('../utilities/withdrawalHandler');
 
 // Get withdrawal wallet balance
-router.get('/balance', auth, async (req, res) => {
+router.get('/balance', authenticateUser, async (req, res) => {
     try {
         const user = await User.findById(req.user.id);
         if (!user) {
@@ -26,7 +26,7 @@ router.get('/balance', auth, async (req, res) => {
 });
 
 // Process a withdrawal request
-router.post('/request', auth, async (req, res) => {
+router.post('/request', authenticateUser, async (req, res) => {
     try {
         const { amount } = req.body;
         
@@ -44,7 +44,7 @@ router.post('/request', auth, async (req, res) => {
 });
 
 // Get withdrawal history for a user
-router.get('/history', auth, async (req, res) => {
+router.get('/history', authenticateUser, async (req, res) => {
     try {
         const transactions = await Transaction.find({
             userId: req.user.id,
@@ -59,13 +59,8 @@ router.get('/history', auth, async (req, res) => {
 });
 
 // Admin route - Process a withdrawal request
-router.post('/admin/process/:id', auth, async (req, res) => {
+router.post('/admin/process/:id', authenticateUser, isAdmin, async (req, res) => {
     try {
-        // Check if user is admin
-        const user = await User.findById(req.user.id);
-        if (!user || !user.isAdmin) {
-            return res.status(403).json({ success: false, message: 'Not authorized' });
-        }
         
         const { id } = req.params;
         const { status, remarks } = req.body;

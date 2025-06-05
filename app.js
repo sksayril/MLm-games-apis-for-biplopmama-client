@@ -14,6 +14,7 @@ const gameRouter = require('./routes/game');
 const numberGameRouter = require('./routes/number-game');
 const withdrawalRouter = require('./routes/withdrawal');
 const adminGameRouter = require('./routes/admin-game');
+const mlmRouter = require('./routes/mlm');
 const adminNumberGameRouter = require('./routes/admin/number-game');
 const adminDashboardRouter = require('./routes/admin/dashboard');
 
@@ -44,6 +45,7 @@ app.use('/api/game', gameRouter);
 app.use('/api/number-game', numberGameRouter);
 app.use('/api/withdrawal', withdrawalRouter);
 app.use('/api/admin/game', adminGameRouter);
+app.use('/api/mlm', mlmRouter);
 app.use('/api/admin/number-game', adminNumberGameRouter);
 app.use('/api/admin/dashboard', adminDashboardRouter);
 

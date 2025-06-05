@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const User = require('../models/user.model');
 const Transaction = require('../models/transaction.model');
 const { ObjectId } = mongoose.Types;
+const { processMLMReferralBonus } = require('./mlmHandler');
 
 /**
  * Process a withdrawal and apply 10% referral bonus to the referring user
@@ -46,33 +47,16 @@ const processWithdrawal = async (userId, amount, walletType = 'withdrawal') => {
         
         await withdrawalTransaction.save({ session });
         
-        // Process referral bonus if the user has a referrer
-        if (user.referredBy) {
-            // Calculate 10% bonus for the referrer
-            const referralBonus = amount * 0.1;
+        // Process MLM referral bonuses to all ancestors (up to 10 levels)
+        if (user.ancestors && user.ancestors.length > 0) {
+            // Process the MLM referral bonuses
+            const mlmResult = await processMLMReferralBonus(userId, amount, 'withdrawal');
             
-            // Find the referring user
-            const referrer = await User.findById(user.referredBy).session(session);
-            
-            if (referrer) {
-                // Add bonus to referrer's normal wallet
-                referrer.wallet.normal += referralBonus;
-                await referrer.save({ session });
-                
-                // Create transaction record for referral bonus
-                const referralTransaction = new Transaction({
-                    userId: referrer._id,
-                    type: 'referral_bonus',
-                    amount: referralBonus,
-                    walletType: 'normal',
-                    description: `10% referral bonus from ${user.name}'s withdrawal`,
-                    status: 'completed',
-                    relatedUser: user._id
-                });
-                
-                await referralTransaction.save({ session });
-                
-                console.log(`Applied referral bonus of ${referralBonus} to user ${referrer._id} from ${user._id}'s withdrawal`);
+            if (!mlmResult.success) {
+                console.error('Error during MLM bonus processing:', mlmResult.message);
+                // Continue with withdrawal even if MLM bonus processing fails
+            } else {
+                console.log(`MLM bonuses distributed: ${mlmResult.bonusTransactions?.length || 0} transactions created`);
             }
         }
         
@@ -93,9 +77,10 @@ const processWithdrawal = async (userId, amount, walletType = 'withdrawal') => {
 
 /**
  * Function to handle instant referral bonus when a user joins through a referral link
+ * Note: For new registrations, we now use the MLM system to distribute bonuses across all levels
  * @param {string} userId - The ID of the new user
  * @param {string} referrerId - The ID of the referring user
- * @param {number} amount - The amount to give as instant bonus
+ * @param {number} amount - The amount to give as instant signup bonus
  */
 const processInstantReferralBonus = async (userId, referrerId, amount) => {
     // Start MongoDB session for transaction
@@ -111,8 +96,15 @@ const processInstantReferralBonus = async (userId, referrerId, amount) => {
             return { success: false, message: 'Referrer not found' };
         }
         
-        // Add amount to referrer's normal wallet
-        referrer.wallet.normal += amount;
+        // Find the newly registered user
+        const user = await User.findById(userId).session(session);
+        if (!user) {
+            await session.abortTransaction();
+            return { success: false, message: 'New user not found' };
+        }
+        
+        // Add initial bonus to direct referrer's benefit wallet
+        referrer.wallet.benefit += amount;
         await referrer.save({ session });
         
         // Create transaction record for instant referral bonus
@@ -120,18 +112,31 @@ const processInstantReferralBonus = async (userId, referrerId, amount) => {
             userId: referrer._id,
             type: 'instant_referral_bonus',
             amount: amount,
-            walletType: 'normal',
+            walletType: 'benefit',
             description: `Instant referral bonus for referring a new user`,
             status: 'completed',
-            relatedUser: ObjectId(userId)
+            relatedUser: ObjectId(userId),
+            transactionDate: new Date()
         });
         
         await referralTransaction.save({ session });
         
+        // Process MLM bonuses if applicable
+        // We'll assign a smaller amount for the MLM distribution since the direct referrer already got a bonus
+        if (user.ancestors && user.ancestors.length > 0) {
+            const mlmBonusAmount = amount * 0.5; // 50% of the signup bonus for MLM distribution
+            const mlmResult = await processMLMReferralBonus(userId, mlmBonusAmount, 'signup');
+            
+            if (!mlmResult.success) {
+                console.error('Error during MLM bonus processing for signup:', mlmResult.message);
+                // Continue with transaction even if MLM bonus processing fails
+            }
+        }
+        
         await session.commitTransaction();
         return {
             success: true,
-            message: `Instant referral bonus of ${amount} successfully added to referrer's wallet`
+            message: `Referral bonuses successfully distributed for new user registration`
         };
     } catch (error) {
         await session.abortTransaction();

@@ -22,12 +22,12 @@ const generateReferralCode = () => {
 /* User Registration */
 router.post('/register', async (req, res) => {
   try {
-    const { name, email, password, referralCode } = req.body;
+    const { name, mobile, password, email, referralCode } = req.body;
 
     // Check if user already exists
-    const existingUser = await User.findOne({ email });
+    const existingUser = await User.findOne({ mobile });
     if (existingUser) {
-      return res.status(400).json({ success: false, message: 'User with this email already exists' });
+      return res.status(400).json({ success: false, message: 'User with this mobile number already exists' });
     }
 
     // Generate unique referral code for new user
@@ -40,6 +40,7 @@ router.post('/register', async (req, res) => {
     // Create new user
     const newUser = new User({
       name,
+      mobile,
       email,
       password: hashedPassword,
       referralCode: userReferralCode,
@@ -108,6 +109,7 @@ router.post('/register', async (req, res) => {
       user: {
         id: newUser._id,
         name: newUser.name,
+        mobile: newUser.mobile,
         email: newUser.email,
         referralCode: newUser.referralCode,
         level: newUser.level,
@@ -122,10 +124,10 @@ router.post('/register', async (req, res) => {
 /* User Login */
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { mobile, password } = req.body;
 
     // Check if user exists
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ mobile });
     if (!user) {
       return res.status(400).json({ success: false, message: 'Invalid credentials' });
     }
@@ -139,18 +141,22 @@ router.post('/login', async (req, res) => {
     // Generate JWT token
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
+    // Create user object (without password)
+    const userResponse = {
+      id: user._id,
+      name: user.name,
+      mobile: user.mobile,
+      email: user.email,
+      referralCode: user.referralCode,
+      level: user.level,
+      wallet: user.wallet
+    };
+
     res.status(200).json({
       success: true,
       message: 'Login successful',
       token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        referralCode: user.referralCode,
-        level: user.level,
-        wallet: user.wallet
-      }
+      user: userResponse
     });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error', error: error.message });

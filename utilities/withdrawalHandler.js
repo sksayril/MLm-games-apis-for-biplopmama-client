@@ -103,8 +103,8 @@ const processInstantReferralBonus = async (userId, referrerId, amount) => {
             return { success: false, message: 'New user not found' };
         }
         
-        // Add initial bonus to direct referrer's benefit wallet
-        referrer.wallet.benefit += amount;
+        // Add initial bonus to direct referrer's withdrawal wallet instead of benefit wallet
+        referrer.wallet.withdrawal += amount;
         await referrer.save({ session });
         
         // Create transaction record for instant referral bonus
@@ -112,7 +112,7 @@ const processInstantReferralBonus = async (userId, referrerId, amount) => {
             userId: referrer._id,
             type: 'instant_referral_bonus',
             amount: amount,
-            walletType: 'benefit',
+            walletType: 'withdrawal', // Changed from 'benefit' to 'withdrawal'
             description: `Instant referral bonus for referring a new user`,
             status: 'completed',
             relatedUser: ObjectId(userId),

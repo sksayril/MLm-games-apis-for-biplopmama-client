@@ -22,7 +22,25 @@ const generateReferralCode = () => {
 /* User Registration */
 router.post('/register', async (req, res) => {
   try {
-    const { name, mobile, password, email, referralCode } = req.body;
+    const { name, mobile, password, email, referralCode, referralLink } = req.body;
+    
+    // Extract referral code from link if provided
+    let finalReferralCode = referralCode;
+    if (!finalReferralCode && referralLink) {
+      try {
+        // Extract ref parameter from URL if it's in the format /register?ref=CODE
+        const url = new URL(referralLink);
+        const urlReferralCode = url.searchParams.get('ref');
+        if (urlReferralCode) {
+          finalReferralCode = urlReferralCode;
+        }
+      } catch (err) {
+        // If referralLink is not a valid URL, check if it might be just the code
+        if (referralLink.length >= 6 && referralLink.length <= 10) {
+          finalReferralCode = referralLink;
+        }
+      }
+    }
 
     // Check if user already exists
     const existingUser = await User.findOne({ mobile });
@@ -52,13 +70,13 @@ router.post('/register', async (req, res) => {
     session.startTransaction();
     
     try {
-      // If user signed up with a referral code
-      if (referralCode) {
-        const referrer = await User.findOne({ referralCode }).session(session);
+      // If user signed up with a referral code (from either direct code or extracted from link)
+      if (finalReferralCode) {
+        const referrer = await User.findOne({ referralCode: finalReferralCode }).session(session);
         if (referrer) {
           // Set referrer
           newUser.referredBy = referrer._id;
-          newUser.level = 1;
+          newUser.level = 1; // This user is level 1 for the direct referrer
           
           // Build the ancestor list (up to 10 levels)
           const ancestors = [];
@@ -66,7 +84,7 @@ router.post('/register', async (req, res) => {
           // Add direct referrer as level 1
           ancestors.push({ userId: referrer._id, level: 1 });
           
-          // Get referrer's ancestors and increment their level
+          // Get referrer's ancestors and increment their level for this new user
           if (referrer.ancestors && referrer.ancestors.length > 0) {
             const referrerAncestors = referrer.ancestors;
             
@@ -83,8 +101,11 @@ router.post('/register', async (req, res) => {
           
           newUser.ancestors = ancestors;
           
-          // Simply save the user with referral info, no initial bonus
+          // Save the user with referral info
           await newUser.save({ session });
+          
+          // The new user gets added to the withdrawal wallet display after first withdrawal
+          // This is handled by the MLM system when they make their first transaction
         }
       } else {
         // No referral code, just save the user
@@ -167,9 +188,35 @@ router.post('/login', async (req, res) => {
 router.get('/profile', authenticateUser, async (req, res) => {
   try {
     const user = await User.findById(req.user._id).select('-password');
+    
+    // Generate referral links
+    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const referralLink = `${baseUrl}/register?ref=${user.referralCode}`;
+    const shortLink = `${baseUrl}/r/${user.referralCode}`;
+    
+    // Create an improved message with clearer instructions
+    const sharingMessage = `Join me on this amazing platform and start earning rewards today! 🎁\n\nUse either:\n▶ My referral code: ${user.referralCode}\n▶ Or sign up directly: ${referralLink}`;
+    
+    // Format the response with extended referral information
+    const userResponse = {
+      ...user.toObject(),
+      referral: {
+        code: user.referralCode,
+        link: referralLink,
+        shortLink: shortLink,
+        shareOptions: {
+          plain: referralLink,
+          whatsapp: `https://wa.me/?text=${encodeURIComponent(sharingMessage)}`,
+          facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(referralLink)}&quote=${encodeURIComponent('Join me and earn rewards with my referral code: ' + user.referralCode)}`,
+          twitter: `https://twitter.com/intent/tweet?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent('Join me and earn rewards with my referral code: ' + user.referralCode)}`,
+          copyMessage: `${sharingMessage}\n\nClick the link or use my code when signing up: ${user.referralCode}`
+        }
+      }
+    };
+    
     res.status(200).json({
       success: true,
-      user
+      user: userResponse
     });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error', error: error.message });
@@ -641,17 +688,24 @@ router.get('/referral-link', authenticateUser, async (req, res) => {
   try {
     const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
     const referralLink = `${baseUrl}/register?ref=${req.user.referralCode}`;
+    const shortLink = `${baseUrl}/r/${req.user.referralCode}`;
+    
+    // Create an improved message with clearer instructions
+    const sharingMessage = `Join me on this amazing platform and start earning rewards today! 🎁\n\nUse either:\n▶ My referral code: ${req.user.referralCode}\n▶ Or sign up directly: ${referralLink}`;
     
     res.status(200).json({
       success: true,
       referralCode: req.user.referralCode,
       referralLink: referralLink,
-      // Generate different sharing formats
+      shortLink: shortLink,
+      // Generate different sharing formats with improved messaging
       shareOptions: {
         plain: referralLink,
-        whatsapp: `https://wa.me/?text=Join me on this amazing platform and earn rewards! Use my referral code: ${req.user.referralCode} or sign up here: ${referralLink}`,
-        facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(referralLink)}`,
-        twitter: `https://twitter.com/intent/tweet?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent('Join me on this amazing platform and earn rewards! Use my referral code: ' + req.user.referralCode)}`
+        code: req.user.referralCode,
+        whatsapp: `https://wa.me/?text=${encodeURIComponent(sharingMessage)}`,
+        facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(referralLink)}&quote=${encodeURIComponent('Join me and earn rewards with my referral code: ' + req.user.referralCode)}`,
+        twitter: `https://twitter.com/intent/tweet?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent('Join me and earn rewards with my referral code: ' + req.user.referralCode)}`,
+        copyMessage: `${sharingMessage}\n\nClick the link or use my code when signing up: ${req.user.referralCode}`
       }
     });
   } catch (error) {
@@ -772,11 +826,11 @@ router.post('/withdrawal', authenticateUser, async (req, res) => {
     // Get user with wallet info
     const user = await User.findById(req.user._id);
     
-    // Check if user has sufficient balance in game wallet
-    if (user.wallet.game < amount) {
+    // Check if user has sufficient balance in withdrawal wallet
+    if (user.wallet.withdrawal < amount) {
       return res.status(400).json({ 
         success: false, 
-        message: `Insufficient balance in game wallet. Available: ${user.wallet.game} Rs` 
+        message: `Insufficient balance in withdrawal wallet. Available: ${user.wallet.withdrawal} Rs` 
       });
     }
     
@@ -785,8 +839,8 @@ router.post('/withdrawal', authenticateUser, async (req, res) => {
     session.startTransaction();
     
     try {
-      // Deduct amount from game wallet
-      user.wallet.game -= amount;
+      // Deduct amount from withdrawal wallet
+      user.wallet.withdrawal -= amount;
       await user.save({ session });
       
       // Record the transaction
@@ -794,8 +848,8 @@ router.post('/withdrawal', authenticateUser, async (req, res) => {
         userId: user._id,
         amount: amount,
         type: 'withdrawal',
-        walletType: 'game',
-        description: 'Withdrawal request from game wallet',
+        walletType: 'withdrawal',
+        description: 'Withdrawal request from withdrawal wallet',
         status: 'pending',
         transactionDate: new Date()
       });

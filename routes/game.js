@@ -270,7 +270,7 @@ router.post('/room/join', authenticateUser, async (req, res) => {
                     const winningUser = await User.findById(winningPlayer.userId).session(session);
                     if (winningUser) {
                         // Add the winning amount to game wallet (equal to entry amount)
-                        winningUser.wallet.game += winAmount;
+                        winningUser.wallet.withdrawal += winAmount;
                         
                         // Return the entry fee to normal wallet
                         winningUser.wallet.normal += entryFee;
@@ -282,7 +282,7 @@ router.post('/room/join', authenticateUser, async (req, res) => {
                             userId: winningUser._id,
                             type: 'recharge',
                             amount: winAmount,
-                            walletType: 'game',
+                            walletType: 'withdrawal',
                             description: `Winning amount in game room ${gameRoom.roomId}`,
                             status: 'completed',
                             transactionDate: new Date()
@@ -332,7 +332,7 @@ router.post('/room/join', authenticateUser, async (req, res) => {
             },
             remainingBalance: {
                 normal: user.wallet.normal,
-                benefit: user.wallet.benefit,
+                withdrawal: user.wallet.withdrawal,
                 game: user.wallet.game
             }
         });

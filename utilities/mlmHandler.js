@@ -7,16 +7,16 @@ const Transaction = require('../models/transaction.model');
  * Total is 10% distributed across 10 levels
  */
 const MLM_BONUS_RATES = {
-    1: 4.00,
-    2: 2.00,
-    3: 1.00,
-    4: 0.50,
-    5: 0.40,
-    6: 0.30,
-    7: 0.30,
-    8: 0.40,
-    9: 0.50,
-    10: 0.60
+    1: 4.00,  // Level 1 - 4.00%
+    2: 2.00,  // Level 2 - 2.00%
+    3: 1.00,  // Level 3 - 1.00%
+    4: 0.50,  // Level 4 - 0.50%
+    5: 0.40,  // Level 5 - 0.40%
+    6: 0.30,  // Level 6 - 0.30%
+    7: 0.30,  // Level 7 - 0.30%
+    8: 0.40,  // Level 8 - 0.40%
+    9: 0.50,  // Level 9 - 0.50%
+    10: 0.60  // Level 10 - 0.60%
 };
 
 /**
@@ -67,8 +67,9 @@ const processMLMReferralBonus = async (userId, amount, transactionType) => {
                     const ancestorUser = await User.findById(ancestor.userId._id).session(session);
                     
                     if (ancestorUser) {
-                        // Add bonus to ancestor's benefit wallet
-                        ancestorUser.wallet.benefit += bonusAmount;
+                        // Add bonus to ancestor's withdrawal wallet
+                        // This is the key change - bonuses go to withdrawal wallet instead of benefit wallet
+                        ancestorUser.wallet.withdrawal += bonusAmount;
                         await ancestorUser.save({ session });
                         
                         // Create transaction record for the MLM bonus
@@ -76,7 +77,7 @@ const processMLMReferralBonus = async (userId, amount, transactionType) => {
                             userId: ancestorUser._id,
                             type: 'mlm_bonus',
                             amount: bonusAmount,
-                            walletType: 'benefit',
+                            walletType: 'withdrawal', // Changed from 'benefit' to 'withdrawal'
                             description: `${bonusRate}% MLM bonus from level ${ancestorLevel} referral transaction`,
                             status: 'completed',
                             relatedUser: userId,

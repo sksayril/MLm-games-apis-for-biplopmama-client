@@ -11,9 +11,36 @@ const withdrawalSchema = new mongoose.Schema({
         required: true,
         min: 500
     },
+    withdrawalMethod: {
+        type: String,
+        enum: ['upi', 'bank'],
+        required: true
+    },
     upiId: {
         type: String,
-        required: true
+        required: function() {
+            return this.withdrawalMethod === 'upi';
+        }
+    },
+    bankDetails: {
+        accountNumber: {
+            type: String,
+            required: function() {
+                return this.withdrawalMethod === 'bank';
+            }
+        },
+        ifscCode: {
+            type: String,
+            required: function() {
+                return this.withdrawalMethod === 'bank';
+            }
+        },
+        accountName: {
+            type: String,
+            required: function() {
+                return this.withdrawalMethod === 'bank';
+            }
+        }
     },
     status: {
         type: String,

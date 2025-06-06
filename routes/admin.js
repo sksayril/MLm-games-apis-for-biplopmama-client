@@ -423,11 +423,15 @@ router.post('/deposit-request/:id/approve', authenticateAdmin, async (req, res) 
       return res.status(404).json({ success: false, message: 'User not found' });
     }
     
-    // Update normal wallet balance
-    user.wallet.normal += depositRequest.amount;
+    // Calculate amount after 10% deduction
+    const deductionAmount = depositRequest.amount * 0.10;
+    const finalAmount = depositRequest.amount - deductionAmount;
     
-    // Update benefit wallet balance (2x the normal amount)
-    user.wallet.benefit += depositRequest.amount * 2;
+    // Update normal wallet balance (90% of deposit amount)
+    user.wallet.normal += finalAmount;
+    
+    // Update benefit wallet balance (2x the final amount)
+    user.wallet.benefit += finalAmount * 2;
     
     await user.save({ session });
     
@@ -435,9 +439,9 @@ router.post('/deposit-request/:id/approve', authenticateAdmin, async (req, res) 
     const normalTransaction = new Transaction({
       userId: user._id,
       type: 'recharge',
-      amount: depositRequest.amount,
+      amount: finalAmount,
       walletType: 'normal',
-      description: `Deposit request #${depositRequest._id} approved`,
+      description: `Deposit request #${depositRequest._id} approved (10% deduction applied)`,
       status: 'completed',
       performedBy: req.admin._id
     });
@@ -448,19 +452,19 @@ router.post('/deposit-request/:id/approve', authenticateAdmin, async (req, res) 
     const benefitTransaction = new Transaction({
       userId: user._id,
       type: 'recharge',
-      amount: depositRequest.amount * 2,
+      amount: finalAmount * 2,
       walletType: 'benefit',
-      description: `Benefit wallet bonus from deposit request #${depositRequest._id}`,
+      description: `Benefit wallet bonus from deposit request #${depositRequest._id} (10% deduction applied)`,
       status: 'completed',
       performedBy: req.admin._id
     });
     
     await benefitTransaction.save({ session });
     
-    // Create a deposit for daily growth
+    // Create a deposit for daily growth (using final amount)
     const deposit = new Deposit({
       userId: user._id,
-      amount: depositRequest.amount,
+      amount: finalAmount,
       startDate: new Date(),
       daysGrown: 0,
       isActive: true
@@ -476,11 +480,11 @@ router.post('/deposit-request/:id/approve', authenticateAdmin, async (req, res) 
     
     await depositRequest.save({ session });
     
-    // Distribute MLM benefits to upline (ancestors)
+    // Distribute MLM benefits to upline (ancestors) based on final amount
     if (user.ancestors && user.ancestors.length > 0) {
       for (const ancestor of user.ancestors) {
-        // Calculate 1% benefit for each level
-        const benefitAmount = depositRequest.amount * 0.01;
+        // Calculate 1% benefit for each level from final amount
+        const benefitAmount = finalAmount * 0.01;
         
         // Find the ancestor user
         const ancestorUser = await User.findById(ancestor.userId).session(session);
@@ -495,7 +499,7 @@ router.post('/deposit-request/:id/approve', authenticateAdmin, async (req, res) 
             type: 'bonus',
             amount: benefitAmount,
             walletType: 'benefit',
-            description: `MLM benefit from level ${ancestor.level} user deposit request`,
+            description: `MLM benefit from level ${ancestor.level} user deposit request (10% deduction applied)`,
             status: 'completed',
             performedBy: req.admin._id
           });
@@ -510,12 +514,15 @@ router.post('/deposit-request/:id/approve', authenticateAdmin, async (req, res) 
     
     res.status(200).json({
       success: true,
-      message: 'Deposit request approved successfully',
+      message: 'Deposit request approved successfully (10% deduction applied)',
       depositRequest: {
         id: depositRequest._id,
         status: 'approved',
         approvedBy: req.admin._id,
-        approvedDate: depositRequest.approvedDate
+        approvedDate: depositRequest.approvedDate,
+        originalAmount: depositRequest.amount,
+        deductionAmount: deductionAmount,
+        finalAmount: finalAmount
       },
       updatedWallet: {
         normal: user.wallet.normal,
@@ -671,19 +678,30 @@ router.post('/withdrawal/:id/approve', authenticateAdmin, async (req, res) => {
           message: `This withdrawal request has already been ${withdrawal.status}` 
         });
       }
+
+      // Calculate 10% deduction
+      const deductionAmount = withdrawal.amount * 0.10;
+      const finalAmount = withdrawal.amount - deductionAmount;
       
       // Update withdrawal request status
       withdrawal.status = 'approved';
       withdrawal.processedBy = req.admin._id;
       withdrawal.processedAt = new Date();
-      withdrawal.remarks = req.body.remarks || 'Approved by admin';
+      withdrawal.remarks = req.body.remarks || 'Approved by admin (10% deduction applied)';
+      withdrawal.originalAmount = withdrawal.amount;
+      withdrawal.deductionAmount = deductionAmount;
+      withdrawal.finalAmount = finalAmount;
       
       await withdrawal.save({ session });
       
       // Find related transaction and mark as completed
       const transaction = await Transaction.findOneAndUpdate(
         { userId: withdrawal.userId, type: 'withdrawal', status: 'pending', amount: withdrawal.amount },
-        { status: 'completed', description: 'Withdrawal request approved' },
+        { 
+          status: 'completed', 
+          amount: finalAmount,
+          description: `Withdrawal request approved (10% deduction applied. Original: ${withdrawal.amount}, Deduction: ${deductionAmount}, Final: ${finalAmount})` 
+        },
         { new: true, session }
       );
       
@@ -691,16 +709,21 @@ router.post('/withdrawal/:id/approve', authenticateAdmin, async (req, res) => {
       
       res.status(200).json({
         success: true,
-        message: 'Withdrawal request approved successfully',
+        message: 'Withdrawal request approved successfully (10% deduction applied)',
         withdrawal: {
           id: withdrawal._id,
           status: 'approved',
           processedBy: req.admin._id,
-          processedAt: withdrawal.processedAt
+          processedAt: withdrawal.processedAt,
+          originalAmount: withdrawal.originalAmount,
+          deductionAmount: withdrawal.deductionAmount,
+          finalAmount: withdrawal.finalAmount
         },
         transaction: transaction ? {
           id: transaction._id,
-          status: transaction.status
+          status: transaction.status,
+          amount: transaction.amount,
+          description: transaction.description
         } : null
       });
     } catch (error) {

@@ -807,20 +807,52 @@ router.get('/deposit-request/:id', authenticateUser, async (req, res) => {
 /* Create a withdrawal request */
 router.post('/withdrawal', authenticateUser, async (req, res) => {
   try {
-    const { amount, upiId } = req.body;
+    const { amount, withdrawalMethod, upiId, bankDetails } = req.body;
     
     // Validate input
     if (!amount || amount <= 0) {
       return res.status(400).json({ success: false, message: 'Valid amount is required' });
     }
     
-    if (!upiId || upiId.trim() === '') {
-      return res.status(400).json({ success: false, message: 'Valid UPI ID is required' });
-    }
-    
     // Minimum withdrawal amount requirement
     if (amount < 500) {
       return res.status(400).json({ success: false, message: 'Minimum withdrawal amount is 500' });
+    }
+
+    // Validate withdrawal method
+    if (!withdrawalMethod || !['upi', 'bank'].includes(withdrawalMethod)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Valid withdrawal method is required (upi or bank)' 
+      });
+    }
+
+    // Validate UPI details
+    if (withdrawalMethod === 'upi') {
+      if (!upiId || upiId.trim() === '') {
+        return res.status(400).json({ success: false, message: 'Valid UPI ID is required' });
+      }
+    }
+
+    // Validate bank details
+    if (withdrawalMethod === 'bank') {
+      if (!bankDetails) {
+        return res.status(400).json({ success: false, message: 'Bank details are required' });
+      }
+      
+      const { accountNumber, ifscCode, accountName } = bankDetails;
+      
+      if (!accountNumber || accountNumber.trim() === '') {
+        return res.status(400).json({ success: false, message: 'Valid account number is required' });
+      }
+      
+      if (!ifscCode || ifscCode.trim() === '') {
+        return res.status(400).json({ success: false, message: 'Valid IFSC code is required' });
+      }
+      
+      if (!accountName || accountName.trim() === '') {
+        return res.status(400).json({ success: false, message: 'Valid account name is required' });
+      }
     }
     
     // Get user with wallet info
@@ -849,7 +881,7 @@ router.post('/withdrawal', authenticateUser, async (req, res) => {
         amount: amount,
         type: 'withdrawal',
         walletType: 'withdrawal',
-        description: 'Withdrawal request from withdrawal wallet',
+        description: `Withdrawal request from withdrawal wallet (${withdrawalMethod})`,
         status: 'pending',
         transactionDate: new Date()
       });
@@ -860,7 +892,9 @@ router.post('/withdrawal', authenticateUser, async (req, res) => {
       const withdrawalRequest = new Withdrawal({
         userId: req.user._id,
         amount: Number(amount),
-        upiId: upiId,
+        withdrawalMethod,
+        upiId: withdrawalMethod === 'upi' ? upiId : undefined,
+        bankDetails: withdrawalMethod === 'bank' ? bankDetails : undefined,
         status: 'pending'
       });
       
@@ -874,7 +908,9 @@ router.post('/withdrawal', authenticateUser, async (req, res) => {
         withdrawal: {
           id: withdrawalRequest._id,
           amount: withdrawalRequest.amount,
+          withdrawalMethod: withdrawalRequest.withdrawalMethod,
           upiId: withdrawalRequest.upiId,
+          bankDetails: withdrawalRequest.bankDetails,
           status: withdrawalRequest.status,
           createdAt: withdrawalRequest.createdAt
         }

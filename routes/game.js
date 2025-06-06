@@ -273,7 +273,7 @@ router.post('/room/join', authenticateUser, async (req, res) => {
                         winningUser.wallet.withdrawal += winAmount;
                         
                         // Return the entry fee to normal wallet
-                        winningUser.wallet.normal += entryFee;
+                        winningUser.wallet.game += entryFee;
                         
                         await winningUser.save({ session });
                         
@@ -294,7 +294,7 @@ router.post('/room/join', authenticateUser, async (req, res) => {
                             userId: winningUser._id,
                             type: 'recharge',
                             amount: entryFee,
-                            walletType: 'normal',
+                            walletType: 'game',
                             description: `Entry fee returned for winning in game room ${gameRoom.roomId}`,
                             status: 'completed',
                             transactionDate: new Date()

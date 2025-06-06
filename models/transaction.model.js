@@ -17,7 +17,7 @@ const transactionSchema = new mongoose.Schema({
     },
     walletType: {
         type: String,
-        enum: ['normal', 'benefit', 'game'],
+        enum: ['normal', 'benefit', 'game', 'withdrawal'],
         required: true
     },
     status: {

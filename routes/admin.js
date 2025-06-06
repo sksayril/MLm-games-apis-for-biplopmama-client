@@ -609,7 +609,19 @@ router.get('/withdrawals', authenticateAdmin, async (req, res) => {
         userEmail: withdrawal.userId ? withdrawal.userId.email : null,
         userName: withdrawal.userId ? withdrawal.userId.name : null,
         amount: withdrawal.amount,
-        upiId: withdrawal.upiId,
+        withdrawalMethod: withdrawal.withdrawalMethod,
+        // Show UPI ID if method is UPI
+        ...(withdrawal.withdrawalMethod === 'upi' && {
+          upiId: withdrawal.upiId
+        }),
+        // Show bank details if method is bank
+        ...(withdrawal.withdrawalMethod === 'bank' && {
+          bankDetails: {
+            accountNumber: withdrawal.bankDetails.accountNumber,
+            ifscCode: withdrawal.bankDetails.ifscCode,
+            accountName: withdrawal.bankDetails.accountName
+          }
+        }),
         status: withdrawal.status,
         remarks: withdrawal.remarks,
         processedBy: withdrawal.processedBy,

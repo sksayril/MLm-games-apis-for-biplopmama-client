@@ -187,14 +187,14 @@ const calculateDailyGrowth = async () => {
     }
 };
 
-// Schedule daily growth calculation to run at midnight every day
+// Schedule daily growth calculation to run at midnight every weekday
 const startDailyGrowthScheduler = () => {
-    // Run at midnight (00:00) every day
-    cron.schedule('0 0 * * *', () => {
+    // Run at midnight (00:00) every day except Saturday (6) and Sunday (0)
+    cron.schedule('0 0 * * 1-5', () => {
         calculateDailyGrowth();
     });
     
-    console.log('Daily growth scheduler started');
+    console.log('Daily growth scheduler started (weekdays only)');
 };
 
 // Function to manually trigger growth calculation (for testing or catch-up)

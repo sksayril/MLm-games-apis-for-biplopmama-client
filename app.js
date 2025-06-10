@@ -28,8 +28,13 @@ startGameRoomResetScheduler();
 
 const app = express();
 
-// Enable CORS for all routes
-app.use(cors());
+// Enable CORS for all routes with detailed configuration
+app.use(cors({
+  origin: '*', // Allow all origins
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  credentials: true,
+  maxAge: 86400 // 24 hours
+}));
 
 app.use(logger('dev'));
 app.use(express.json());

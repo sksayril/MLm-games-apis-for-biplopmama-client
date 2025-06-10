@@ -691,19 +691,12 @@ router.post('/withdrawal/:id/approve', authenticateAdmin, async (req, res) => {
           message: `This withdrawal request has already been ${withdrawal.status}` 
         });
       }
-
-      // Calculate 10% deduction
-      const deductionAmount = withdrawal.amount * 0.10;
-      const finalAmount = withdrawal.amount - deductionAmount;
       
       // Update withdrawal request status
       withdrawal.status = 'approved';
       withdrawal.processedBy = req.admin._id;
       withdrawal.processedAt = new Date();
-      withdrawal.remarks = req.body.remarks || 'Approved by admin (10% deduction applied)';
-      withdrawal.originalAmount = withdrawal.amount;
-      withdrawal.deductionAmount = deductionAmount;
-      withdrawal.finalAmount = finalAmount;
+      withdrawal.remarks = req.body.remarks || 'Approved by admin';
       
       await withdrawal.save({ session });
       
@@ -712,8 +705,7 @@ router.post('/withdrawal/:id/approve', authenticateAdmin, async (req, res) => {
         { userId: withdrawal.userId, type: 'withdrawal', status: 'pending', amount: withdrawal.amount },
         { 
           status: 'completed', 
-          amount: finalAmount,
-          description: `Withdrawal request approved (10% deduction applied. Original: ${withdrawal.amount}, Deduction: ${deductionAmount}, Final: ${finalAmount})` 
+          description: 'Withdrawal request approved' 
         },
         { new: true, session }
       );
@@ -722,15 +714,13 @@ router.post('/withdrawal/:id/approve', authenticateAdmin, async (req, res) => {
       
       res.status(200).json({
         success: true,
-        message: 'Withdrawal request approved successfully (10% deduction applied)',
+        message: 'Withdrawal request approved successfully',
         withdrawal: {
           id: withdrawal._id,
           status: 'approved',
           processedBy: req.admin._id,
           processedAt: withdrawal.processedAt,
-          originalAmount: withdrawal.originalAmount,
-          deductionAmount: withdrawal.deductionAmount,
-          finalAmount: withdrawal.finalAmount
+          amount: withdrawal.amount
         },
         transaction: transaction ? {
           id: transaction._id,

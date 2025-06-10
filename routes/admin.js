@@ -424,8 +424,9 @@ router.post('/deposit-request/:id/approve', authenticateAdmin, async (req, res) 
     }
     
     // Calculate amount after 10% deduction
-    const deductionAmount = depositRequest.amount * 0.10;
-    const finalAmount = depositRequest.amount - deductionAmount;
+    // const deductionAmount = depositRequest.amount * 0.10;
+    // const finalAmount = depositRequest.amount - deductionAmount;
+    const finalAmount = depositRequest.amount;
     
     // Update normal wallet balance (90% of deposit amount)
     user.wallet.normal += finalAmount;

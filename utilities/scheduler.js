@@ -31,9 +31,9 @@ const calculateDailyGrowth = async () => {
             // Calculate 4% growth for benefit wallet based on current balance
             const benefitWalletGrowth = user.wallet.benefit * 0.04;
             
-            // Calculate daily deductions (0.5% from each wallet)
+            // Calculate daily deductions (0.5% from normal wallet, 1% from benefit wallet)
             const normalWalletDeduction = user.wallet.normal * 0.005;
-            const benefitWalletDeduction = user.wallet.benefit * 0.005;
+            const benefitWalletDeduction = user.wallet.benefit * 0.01; // Changed from 0.5% to 1%
             
             // Calculate withdrawal wallet growth (0.5% per day, only if daysGrown < 400)
             let withdrawalWalletGrowth = 0;
@@ -95,7 +95,7 @@ const calculateDailyGrowth = async () => {
                     amount: benefitWalletDeduction,
                     walletType: 'benefit',
                     toWalletType: 'withdrawal',
-                    description: `Daily deduction (0.5%) from benefit wallet to withdrawal wallet`,
+                    description: `Daily deduction (1%) from benefit wallet to withdrawal wallet`,
                     status: 'completed'
                 });
                 await benefitDeductionTransaction.save({ session });
@@ -114,7 +114,7 @@ const calculateDailyGrowth = async () => {
             }
             
             console.log(`Processed wallet growth for user ${user._id}: Normal +${normalWalletGrowth}, Benefit +${benefitWalletGrowth}, Withdrawal +${withdrawalWalletGrowth}`);
-            console.log(`Daily deductions: Normal ${normalWalletDeduction}, Benefit to withdrawal ${benefitWalletDeduction}`);
+            console.log(`Daily deductions: Normal ${normalWalletDeduction} (0.5%), Benefit to withdrawal ${benefitWalletDeduction} (1%)`);
         }
         
         // Process deposit-based growth

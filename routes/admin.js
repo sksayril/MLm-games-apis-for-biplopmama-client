@@ -423,9 +423,7 @@ router.post('/deposit-request/:id/approve', authenticateAdmin, async (req, res) 
       return res.status(404).json({ success: false, message: 'User not found' });
     }
     
-    // Calculate amount after 10% deduction
-    // const deductionAmount = depositRequest.amount * 0.10;
-    // const finalAmount = depositRequest.amount - deductionAmount;
+    // No deduction applied, full amount is used
     const finalAmount = depositRequest.amount;
     
     // Update normal wallet balance (90% of deposit amount)
@@ -442,7 +440,7 @@ router.post('/deposit-request/:id/approve', authenticateAdmin, async (req, res) 
       type: 'recharge',
       amount: finalAmount,
       walletType: 'normal',
-      description: `Deposit request #${depositRequest._id} approved (10% deduction applied)`,
+      description: `Deposit request #${depositRequest._id} approved`,
       status: 'completed',
       performedBy: req.admin._id
     });
@@ -455,7 +453,7 @@ router.post('/deposit-request/:id/approve', authenticateAdmin, async (req, res) 
       type: 'recharge',
       amount: finalAmount * 2,
       walletType: 'benefit',
-      description: `Benefit wallet bonus from deposit request #${depositRequest._id} (10% deduction applied)`,
+      description: `Benefit wallet bonus from deposit request #${depositRequest._id} (2x amount)`,
       status: 'completed',
       performedBy: req.admin._id
     });
@@ -481,31 +479,63 @@ router.post('/deposit-request/:id/approve', authenticateAdmin, async (req, res) 
     
     await depositRequest.save({ session });
     
-    // Distribute MLM benefits to upline (ancestors) based on final amount
+    // Distribute MLM benefits to upline (ancestors) based on final amount and level
     if (user.ancestors && user.ancestors.length > 0) {
       for (const ancestor of user.ancestors) {
-        // Calculate 1% benefit for each level from final amount
-        const benefitAmount = finalAmount * 0.01;
+        // Calculate tiered benefit based on level
+        let benefitPercentage = 0;
+        
+        // Map the ancestor level to the appropriate benefit percentage
+        switch (ancestor.level) {
+          case 1: benefitPercentage = 0.04; break; // 4.00%
+          case 2: benefitPercentage = 0.02; break; // 2.00%
+          case 3: benefitPercentage = 0.01; break; // 1.00%
+          case 4: benefitPercentage = 0.005; break; // 0.50%
+          case 5: benefitPercentage = 0.004; break; // 0.40%
+          case 6: benefitPercentage = 0.003; break; // 0.30%
+          case 7: benefitPercentage = 0.003; break; // 0.30%
+          case 8: benefitPercentage = 0.004; break; // 0.40%
+          case 9: benefitPercentage = 0.005; break; // 0.50%
+          case 10: benefitPercentage = 0.006; break; // 0.60%
+          default: benefitPercentage = 0; // No benefit for levels beyond 10
+        }
+        
+        const benefitAmount = finalAmount * benefitPercentage;
         
         // Find the ancestor user
         const ancestorUser = await User.findById(ancestor.userId).session(session);
-        if (ancestorUser) {
+        if (ancestorUser && benefitAmount > 0) {
           // Update ancestor's benefit wallet
           ancestorUser.wallet.benefit += benefitAmount;
+          // Also add to ancestor's withdrawal wallet (10% of the benefit amount)
+          ancestorUser.wallet.withdrawal += benefitAmount * 0.1;
           await ancestorUser.save({ session });
           
-          // Create transaction record for the ancestor
+          // Create transaction record for the ancestor's benefit wallet
           const ancestorTransaction = new Transaction({
             userId: ancestorUser._id,
             type: 'bonus',
             amount: benefitAmount,
             walletType: 'benefit',
-            description: `MLM benefit from level ${ancestor.level} user deposit request (10% deduction applied)`,
+            description: `MLM benefit from level ${ancestor.level} user deposit (${benefitPercentage * 100}%)`,
             status: 'completed',
             performedBy: req.admin._id
           });
           
           await ancestorTransaction.save({ session });
+          
+          // Create transaction record for the ancestor's withdrawal wallet
+          const ancestorWithdrawalTransaction = new Transaction({
+            userId: ancestorUser._id,
+            type: 'bonus',
+            amount: benefitAmount * 0.1,
+            walletType: 'withdrawal',
+            description: `Withdrawal bonus from level ${ancestor.level} user deposit (10% of ${benefitPercentage * 100}% benefit)`,
+            status: 'completed',
+            performedBy: req.admin._id
+          });
+          
+          await ancestorWithdrawalTransaction.save({ session });
         }
       }
     }
@@ -515,14 +545,13 @@ router.post('/deposit-request/:id/approve', authenticateAdmin, async (req, res) 
     
     res.status(200).json({
       success: true,
-      message: 'Deposit request approved successfully (10% deduction applied)',
+      message: 'Deposit request approved successfully',
       depositRequest: {
         id: depositRequest._id,
         status: 'approved',
         approvedBy: req.admin._id,
         approvedDate: depositRequest.approvedDate,
         originalAmount: depositRequest.amount,
-        deductionAmount: deductionAmount,
         finalAmount: finalAmount
       },
       updatedWallet: {

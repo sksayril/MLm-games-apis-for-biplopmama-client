@@ -815,7 +815,7 @@ router.post('/withdrawal', authenticateUser, async (req, res) => {
     }
     
     // Minimum withdrawal amount requirement
-    if (amount < 500) {
+    if (amount < 300) {
       return res.status(400).json({ success: false, message: 'Minimum withdrawal amount is 500' });
     }
 

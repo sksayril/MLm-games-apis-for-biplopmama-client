@@ -91,46 +91,18 @@ const calculateDailyGrowth = async () => {
 };
 
 const startDailyGrowthScheduler = (runImmediately = false) => {
-    // Schedule daily at 12:00 AM (midnight), Monday to Friday
-    cron.schedule('0 0 * * 1-5', () => {
+    // Schedule daily at 3:00 PM
+    cron.schedule('0 0 * * 1-6', () => {
         calculateDailyGrowth();
     });
 
-    // One-time run today at 6:46 PM (if not Saturday or Sunday)
-    const today = new Date();
-    if (today.getDay() !== 0 && today.getDay() !== 6) {
-        const now = new Date();
-        const targetTime = new Date(
-            now.getFullYear(),
-            now.getMonth(),
-            now.getDate(),
-            18, // 6 PM
-            46, // 46 minutes
-            0
-        );
-        const delay = targetTime.getTime() - now.getTime();
-
-        if (delay > 0) {
-            setTimeout(() => {
-                console.log('⏰ Running one-time growth calculation at 6:46 PM today');
-                calculateDailyGrowth();
-            }, delay);
-        } else {
-            console.log('⚠️ 6:46 PM has already passed for today. Skipping one-time execution.');
-        }
-    }
-
-    // Optional: Run immediately if needed
     if (runImmediately) {
-        console.log('🔄 Running daily wallet process immediately...');
+        console.log('Running daily wallet process immediately...');
         calculateDailyGrowth();
     }
 
-    console.log('✅ Scheduler set:');
-    console.log(' - Daily at 12:00 AM (Mon–Fri)');
-    console.log(' - One-time run today at 6:46 PM (if not weekend)');
+    console.log('Daily wallet processing scheduler started (12:00 PM daily)');
 };
-
 
 const triggerGrowthCalculation = async () => {
     console.log('Manually triggering wallet deduction process...');

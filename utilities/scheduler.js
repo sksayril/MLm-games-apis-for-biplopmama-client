@@ -1,208 +1,117 @@
 const cron = require('node-cron');
 const User = require('../models/user.model');
-const Deposit = require('../models/deposit.model');
 const Transaction = require('../models/transaction.model');
 const mongoose = require('mongoose');
-const { ObjectId } = mongoose.Types;
 
-// Function to calculate and apply daily growth to user wallets
 const calculateDailyGrowth = async () => {
-    console.log('Running daily wallet growth calculation:', new Date());
-    
+    console.log('Running daily wallet processing:', new Date());
+
+    const stats = {
+        usersProcessed: 0,
+        totalNormalDeduction: 0,
+        totalBenefitDeduction: 0,
+        totalWithdrawalGrowth: 0,
+        startTime: new Date()
+    };
+
     const session = await mongoose.startSession();
     session.startTransaction();
-    
+
     try {
-        // Find all active deposits
-        const activeDeposits = await Deposit.find({
-            isActive: true,
-            daysGrown: { $lt: 400 } // Only process deposits that haven't reached 400 days
-        }).session(session);
-        
-        console.log(`Processing ${activeDeposits.length} active deposits`);
-        
-        // Process all users for wallet-based daily growth (independent of deposits)
         const allUsers = await User.find().session(session);
-        
+
         for (const user of allUsers) {
-            // Calculate 2% growth for normal wallet based on current balance
-            const normalWalletGrowth = user.wallet.normal * 0.02;
-            
-            // Calculate 4% growth for benefit wallet based on current balance
-            const benefitWalletGrowth = user.wallet.benefit * 0.04;
-            
-            // Calculate daily deductions (0.5% from normal wallet, 1% from benefit wallet)
-            const normalWalletDeduction = user.wallet.normal * 0.005;
-            const benefitWalletDeduction = user.wallet.benefit * 0.01; // Changed from 0.5% to 1%
-            
-            // Calculate withdrawal wallet growth (0.5% per day, only if daysGrown < 400)
-            let withdrawalWalletGrowth = 0;
-            if (user.wallet.withdrawalDaysGrown < 400) {
-                withdrawalWalletGrowth = user.wallet.withdrawal * 0.005;
-                user.wallet.withdrawalDaysGrown += 1;
-            }
-            
-            // Update user's wallets
-            user.wallet.normal += normalWalletGrowth - normalWalletDeduction;
-            user.wallet.benefit += benefitWalletGrowth - benefitWalletDeduction;
-            // Only add benefit wallet deduction to withdrawal wallet
-            user.wallet.withdrawal += benefitWalletDeduction + withdrawalWalletGrowth;
-            
-            // Save changes
+            const normalWallet = user.wallet.normal || 0;
+            const benefitWallet = user.wallet.benefit || 0;
+            const withdrawalWallet = user.wallet.withdrawal || 0;
+
+            const normalWalletDeduction = Math.floor(normalWallet * 0.005 * 100) / 100;
+            const benefitWalletDeduction = Math.floor(benefitWallet * 0.01 * 100) / 100;
+
+            // New wallet values
+            user.wallet.normal = normalWallet - normalWalletDeduction;
+            user.wallet.benefit = benefitWallet - benefitWalletDeduction;
+            user.wallet.withdrawal = withdrawalWallet + benefitWalletDeduction;
+
             await user.save({ session });
-            
-            // Create transaction records for wallet-based growth
-            if (normalWalletGrowth > 0) {
-                const normalTransaction = new Transaction({
-                    userId: user._id,
-                    type: 'bonus',
-                    amount: normalWalletGrowth,
-                    walletType: 'normal',
-                    description: `Daily growth (2%) on normal wallet balance`,
-                    status: 'completed'
-                });
-                await normalTransaction.save({ session });
-            }
-            
-            if (benefitWalletGrowth > 0) {
-                const benefitTransaction = new Transaction({
-                    userId: user._id,
-                    type: 'bonus',
-                    amount: benefitWalletGrowth,
-                    walletType: 'benefit',
-                    description: `Daily growth (4%) on benefit wallet balance`,
-                    status: 'completed'
-                });
-                await benefitTransaction.save({ session });
-            }
-            
+
+            // Log stats
+            stats.usersProcessed++;
+            stats.totalNormalDeduction += normalWalletDeduction;
+            stats.totalBenefitDeduction += benefitWalletDeduction;
+            stats.totalWithdrawalGrowth += benefitWalletDeduction;
+
+            // Record transactions
             if (normalWalletDeduction > 0) {
-                const normalDeductionTransaction = new Transaction({
+                await new Transaction({
                     userId: user._id,
-                    type: 'deduction',
+                    type: 'withdrawal',
                     amount: normalWalletDeduction,
                     walletType: 'normal',
-                    description: `Daily deduction (0.5%) from normal wallet`,
+                    description: 'Daily 0.5% deduction from normal wallet',
                     status: 'completed'
-                });
-                await normalDeductionTransaction.save({ session });
+                }).save({ session });
             }
-            
+
             if (benefitWalletDeduction > 0) {
-                const benefitDeductionTransaction = new Transaction({
+                await new Transaction({
                     userId: user._id,
                     type: 'transfer',
                     amount: benefitWalletDeduction,
                     walletType: 'benefit',
                     toWalletType: 'withdrawal',
-                    description: `Daily deduction (1%) from benefit wallet to withdrawal wallet`,
+                    description: 'Daily 1% deduction from benefit wallet transferred to withdrawal wallet',
                     status: 'completed'
-                });
-                await benefitDeductionTransaction.save({ session });
+                }).save({ session });
             }
-            
-            if (withdrawalWalletGrowth > 0) {
-                const withdrawalGrowthTransaction = new Transaction({
-                    userId: user._id,
-                    type: 'bonus',
-                    amount: withdrawalWalletGrowth,
-                    walletType: 'withdrawal',
-                    description: `Daily growth (0.5%) on withdrawal wallet balance (day ${user.wallet.withdrawalDaysGrown} of 400)`,
-                    status: 'completed'
-                });
-                await withdrawalGrowthTransaction.save({ session });
+
+            if (stats.usersProcessed % 10 === 0) {
+                console.log(`Processed user ${user._id}`);
             }
-            
-            console.log(`Processed wallet growth for user ${user._id}: Normal +${normalWalletGrowth}, Benefit +${benefitWalletGrowth}, Withdrawal +${withdrawalWalletGrowth}`);
-            console.log(`Daily deductions: Normal ${normalWalletDeduction} (0.5%), Benefit to withdrawal ${benefitWalletDeduction} (1%)`);
         }
-        
-        // Process deposit-based growth
-        for (const deposit of activeDeposits) {
-            // Find the user
-            const user = await User.findById(deposit.userId).session(session);
-            
-            if (!user) {
-                console.log(`User not found for deposit ${deposit._id}`);
-                continue;
-            }
-            
-            // Calculate daily growth for normal wallet
-            const normalGrowthAmount = deposit.amount * deposit.normalGrowthRate;
-            
-            // Calculate daily growth for benefit wallet
-            const benefitGrowthAmount = deposit.amount * deposit.benefitGrowthRate;
-            
-            // Update user's wallets
-            user.wallet.normal += normalGrowthAmount;
-            user.wallet.benefit += benefitGrowthAmount;
-            
-            // Update deposit record
-            deposit.daysGrown += 1;
-            deposit.totalNormalGrowth += normalGrowthAmount;
-            deposit.totalBenefitGrowth += benefitGrowthAmount;
-            deposit.lastGrowthDate = new Date();
-            
-            // Check if deposit has reached 400 days
-            if (deposit.daysGrown >= 400) {
-                deposit.isActive = false;
-            }
-            
-            // Save changes
-            await user.save({ session });
-            await deposit.save({ session });
-            
-            // Create transaction records for growth
-            const normalTransaction = new Transaction({
-                userId: user._id,
-                type: 'bonus',
-                amount: normalGrowthAmount,
-                walletType: 'normal',
-                description: `Daily deposit growth for deposit #${deposit._id}`,
-                status: 'completed'
-            });
-            
-            const benefitTransaction = new Transaction({
-                userId: user._id,
-                type: 'bonus',
-                amount: benefitGrowthAmount,
-                walletType: 'benefit',
-                description: `Daily deposit growth for deposit #${deposit._id}`,
-                status: 'completed'
-            });
-            
-            await normalTransaction.save({ session });
-            await benefitTransaction.save({ session });
-            
-            console.log(`Processed growth for user ${user._id}: Normal +${normalGrowthAmount}, Benefit +${benefitGrowthAmount}`);
-        }
-        
+
         await session.commitTransaction();
-        console.log('Daily growth calculation completed successfully');
-    } catch (error) {
+
+        const endTime = new Date();
+        const duration = (endTime - stats.startTime) / 1000;
+
+        console.log('\n======= DAILY WALLET DEDUCTION SUMMARY =======');
+        console.log(`Users processed: ${stats.usersProcessed}`);
+        console.log(`Total normal deductions: ₹${stats.totalNormalDeduction.toFixed(2)}`);
+        console.log(`Total benefit deductions: ₹${stats.totalBenefitDeduction.toFixed(2)}`);
+        console.log(`Total withdrawal wallet credited: ₹${stats.totalWithdrawalGrowth.toFixed(2)}`);
+        console.log(`Time taken: ${duration.toFixed(2)} seconds`);
+        console.log('==============================================\n');
+    } catch (err) {
         await session.abortTransaction();
-        console.error('Error calculating daily growth:', error);
+        console.error('Error during wallet processing:', err);
     } finally {
         session.endSession();
     }
 };
 
-// Schedule daily growth calculation to run at 3:00 PM every day
-const startDailyGrowthScheduler = () => {
-    // Run at 3:00 PM (15:00) every day
-    cron.schedule('0 15 * * *', () => {
+const startDailyGrowthScheduler = (runImmediately = false) => {
+    // Schedule daily at 3:00 PM
+    cron.schedule('0 0 * * 1-6', () => {
         calculateDailyGrowth();
     });
-    
-    console.log('Daily growth scheduler started (weekdays only)');
+
+    if (runImmediately) {
+        console.log('Running daily wallet process immediately...');
+        calculateDailyGrowth();
+    }
+
+    console.log('Daily wallet processing scheduler started (12:00 PM daily)');
 };
 
-// Function to manually trigger growth calculation (for testing or catch-up)
 const triggerGrowthCalculation = async () => {
+    console.log('Manually triggering wallet deduction process...');
     await calculateDailyGrowth();
+    console.log('Manual wallet deduction completed.');
 };
 
 module.exports = {
     startDailyGrowthScheduler,
-    triggerGrowthCalculation
+    triggerGrowthCalculation,
+    calculateDailyGrowth
 };

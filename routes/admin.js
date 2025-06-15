@@ -499,38 +499,22 @@ router.post('/deposit-request/:id/approve', authenticateAdmin, async (req, res) 
           case 10: benefitPercentage = 0.006; break; // 0.60%
           default: benefitPercentage = 0; // No benefit for levels beyond 10
         }
-        
         const benefitAmount = finalAmount * benefitPercentage;
         
         // Find the ancestor user
         const ancestorUser = await User.findById(ancestor.userId).session(session);
         if (ancestorUser && benefitAmount > 0) {
-          // Update ancestor's benefit wallet
-          ancestorUser.wallet.benefit += benefitAmount;
-          // Also add to ancestor's withdrawal wallet (10% of the benefit amount)
-          ancestorUser.wallet.withdrawal += benefitAmount * 0.1;
+          // Only update withdrawal wallet (not benefit wallet)
+          ancestorUser.wallet.withdrawal += benefitAmount;
           await ancestorUser.save({ session });
-          
-          // Create transaction record for the ancestor's benefit wallet
-          const ancestorTransaction = new Transaction({
-            userId: ancestorUser._id,
-            type: 'bonus',
-            amount: benefitAmount,
-            walletType: 'benefit',
-            description: `MLM benefit from level ${ancestor.level} user deposit (${benefitPercentage * 100}%)`,
-            status: 'completed',
-            performedBy: req.admin._id
-          });
-          
-          await ancestorTransaction.save({ session });
           
           // Create transaction record for the ancestor's withdrawal wallet
           const ancestorWithdrawalTransaction = new Transaction({
             userId: ancestorUser._id,
             type: 'bonus',
-            amount: benefitAmount * 0.1,
+            amount: benefitAmount,
             walletType: 'withdrawal',
-            description: `Withdrawal bonus from level ${ancestor.level} user deposit (10% of ${benefitPercentage * 100}% benefit)`,
+            description: `MLM benefit from level ${ancestor.level} user deposit (${benefitPercentage * 100}%) - credited to withdrawal wallet`,
             status: 'completed',
             performedBy: req.admin._id
           });

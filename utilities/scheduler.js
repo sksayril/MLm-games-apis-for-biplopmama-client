@@ -92,7 +92,7 @@ const calculateDailyGrowth = async () => {
 
 const startDailyGrowthScheduler = (runImmediately = false) => {
     // Schedule daily at 3:00 PM
-    cron.schedule('0 0 * * 1-6', () => {
+    cron.schedule('0 0 * * 1-5', () => {
         calculateDailyGrowth();
     });
 

@@ -190,7 +190,7 @@ router.get('/profile', authenticateUser, async (req, res) => {
     const user = await User.findById(req.user._id).select('-password');
     
     // Generate referral links
-    const baseUrl = process.env.FRONTEND_URL || 'https://utpfund.live';
+    const baseUrl = process.env.FRONTEND_URL || 'https://dashboard.utpfund.live';
     const referralLink = `${baseUrl}/auth?ref=${user.referralCode}`;
     const shortLink = `${baseUrl}/r/${user.referralCode}`;
     

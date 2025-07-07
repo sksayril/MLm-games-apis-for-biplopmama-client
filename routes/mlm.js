@@ -29,28 +29,44 @@ router.get('/stats', authenticateUser, async (req, res) => {
     const directReferrals = await User.find({ referredBy: userId })
       .select('name mobile referralCode level createdAt');
     
-    // Count users at each level in the downline
-    const levelCounts = await User.aggregate([
+    // Get all users in the downline with their level information
+    const downlineUsers = await User.aggregate([
       { $match: { 'ancestors.userId': userId } },
       { $unwind: '$ancestors' },
       { $match: { 'ancestors.userId': userId } },
-      { $group: { 
-        _id: '$ancestors.level',
-        count: { $sum: 1 }
-      }}
+      { $project: {
+        _id: 1,
+        name: 1,
+        mobile: 1,
+        referralCode: 1,
+        level: '$ancestors.level',
+        createdAt: 1
+      }},
+      { $sort: { level: 1, createdAt: 1 } }
     ]);
     
-    // Create a structured representation of the MLM levels
+    // Group users by level
+    const usersByLevel = {};
+    for (let level = 1; level <= 10; level++) {
+      usersByLevel[level] = downlineUsers.filter(user => user.level === level);
+    }
+    
+    // Create a structured representation of the MLM levels with user details
     const mlmLevels = [];
     for (let level = 1; level <= 10; level++) {
-      const levelData = levelCounts.find(l => l._id === level);
-      const count = levelData ? levelData.count : 0;
+      const usersAtLevel = usersByLevel[level] || [];
       
       mlmLevels.push({
         level,
         rate: MLM_BONUS_RATES[level],
-        referralsCount: count,
-        potentialEarnings: `${MLM_BONUS_RATES[level]}% of transactions`
+        referralsCount: usersAtLevel.length,
+        potentialEarnings: `${MLM_BONUS_RATES[level]}% of transactions`,
+        users: usersAtLevel.map(user => ({
+          name: user.name,
+          mobile: user.mobile,
+          referralCode: user.referralCode,
+          joinedAt: user.createdAt
+        }))
       });
     }
     
@@ -73,7 +89,7 @@ router.get('/stats', authenticateUser, async (req, res) => {
       },
       mlmStats: {
         directReferrals: directReferrals.length,
-        totalNetworkSize: levelCounts.reduce((sum, level) => sum + level.count, 0),
+        totalNetworkSize: downlineUsers.length,
         levels: mlmLevels
       },
       directReferrals,

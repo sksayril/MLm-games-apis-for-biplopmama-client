@@ -160,6 +160,9 @@ router.post('/recharge-wallet', authenticateAdmin, async (req, res) => {
       // Update benefit wallet balance (2x the normal amount)
       user.wallet.benefit += Number(amount) * 2;
       
+      // Update total deposits for scheduler calculation
+      user.totalDeposits = (user.totalDeposits || 0) + Number(amount);
+      
       await user.save({ session });
       
       // Create transaction record

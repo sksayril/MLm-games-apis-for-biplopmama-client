@@ -591,6 +591,10 @@ router.post('/deposit', authenticateUser, async (req, res) => {
       // Update user's normal wallet balance
       const user = await User.findById(req.user._id).session(session);
       user.wallet.normal += Number(amount);
+      
+      // Update total deposits for scheduler calculation
+      user.totalDeposits = (user.totalDeposits || 0) + Number(amount);
+      
       await user.save({ session });
       
       // Process referral bonus if this is the user's first deposit and user has a referrer

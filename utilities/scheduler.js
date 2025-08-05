@@ -26,7 +26,7 @@ const calculateDailyGrowth = async () => {
             const withdrawalWallet = user.wallet.withdrawal || 0;
 
             // Calculate deductions/transfers
-            const normalWalletDeduction = Math.floor(normalWallet * 0.005 * 100) / 100; // 0.5% deduction
+            const normalWalletDeduction = Math.floor(normalWallet * 0.01 * 100) / 100; // 0.5% deduction
             const benefitWalletTransfer = Math.floor(benefitWallet * 0.01 * 100) / 100; // 1% transfer to withdrawal
 
             // Update wallet values

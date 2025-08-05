@@ -20,7 +20,7 @@ const adminDashboardRouter = require('./routes/admin/dashboard');
 
 // Import and start the scheduler for daily wallet growth
 const { startDailyGrowthScheduler } = require('./utilities/scheduler');
-startDailyGrowthScheduler(true); // Run immediately for testing
+startDailyGrowthScheduler(); // Run immediately for testing
 
 // Import and start the scheduler for game room resets
 const { startGameRoomResetScheduler } = require('./utilities/gameScheduler');

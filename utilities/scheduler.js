@@ -34,12 +34,12 @@ const calculateDailyGrowth = async () => {
             // Check if user has initial benefit balance stored
             if (user.initialBenefitBalance && user.initialBenefitBalance > 0) {
                 // Use stored initial balance to calculate fixed daily amount
-                const dailyFixedAmount = Math.floor(user.initialBenefitBalance * 0.01 * 100) / 100; // 1% of initial
+                const dailyFixedAmount = Math.floor(user.initialBenefitBalance * 0.001 * 100) / 100; // 0.5% of initial
                 benefitWalletTransfer = Math.min(dailyFixedAmount, benefitWallet); // Don't transfer more than available
             } else if (benefitWallet > 0) {
                 // First time: store initial balance and calculate fixed amount
                 user.initialBenefitBalance = benefitWallet;
-                benefitWalletTransfer = Math.floor(benefitWallet * 0.01 * 100) / 100; // 1% of initial
+                benefitWalletTransfer = Math.floor(benefitWallet * 0.005 * 100) / 100; // 0.5% of initial
             }
 
             // Update wallet values
@@ -131,12 +131,12 @@ const calculateRemainingDays = (benefitBalance, initialBenefitBalance) => {
     
     if (!initialBenefitBalance) {
         // If no initial balance stored, calculate based on current balance
-        const dailyAmount = Math.floor(benefitBalance * 0.01 * 100) / 100;
+        const dailyAmount = Math.floor(benefitBalance * 0.005 * 100) / 100;
         return Math.ceil(benefitBalance / dailyAmount);
     }
     
     // Calculate based on fixed daily amount
-    const dailyFixedAmount = Math.floor(initialBenefitBalance * 0.01 * 100) / 100;
+    const dailyFixedAmount = Math.floor(initialBenefitBalance * 0.005 * 100) / 100;
     return Math.ceil(benefitBalance / dailyFixedAmount);
 };
 

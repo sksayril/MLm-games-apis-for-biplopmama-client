@@ -6,7 +6,7 @@ const testFixedAmountCalculation = () => {
     
     // Example: User deposits ₹1000, gets ₹2000 in benefit wallet
     const initialBenefitBalance = 2000;
-    const dailyFixedAmount = Math.floor(initialBenefitBalance * 0.01 * 100) / 100; // ₹20
+    const dailyFixedAmount = Math.floor(initialBenefitBalance * 0.005 * 100) / 100; // ₹10
     
     console.log(`Initial benefit wallet balance: ₹${initialBenefitBalance}`);
     console.log(`Daily fixed transfer amount: ₹${dailyFixedAmount}`);

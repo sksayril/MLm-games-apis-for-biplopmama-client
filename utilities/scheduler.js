@@ -25,21 +25,30 @@ const calculateDailyGrowth = async () => {
             const benefitWallet = user.wallet.benefit || 0;
             const withdrawalWallet = user.wallet.withdrawal || 0;
 
-            // Calculate deductions/transfers
-            const normalWalletDeduction = Math.floor(normalWallet * 0.005 * 100) / 100; // 0.5% deduction
-            
-            // Calculate fixed daily benefit transfer based on initial balance
+            // Calculate deductions based on initial deposit amounts
+            let normalWalletDeduction = 0;
             let benefitWalletTransfer = 0;
             
-            // Check if user has initial benefit balance stored
+            // Handle normal wallet deduction (0.5% of initial deposit)
+            if (user.initialNormalBalance && user.initialNormalBalance > 0) {
+                // Use stored initial normal balance to calculate fixed daily amount
+                normalWalletDeduction = Math.floor(user.initialNormalBalance * 0.005 * 100) / 100; // 0.5% of initial
+                normalWalletDeduction = Math.min(normalWalletDeduction, normalWallet); // Don't deduct more than available
+            } else if (normalWallet > 0) {
+                // First time: store initial balance and calculate fixed amount
+                user.initialNormalBalance = normalWallet;
+                normalWalletDeduction = Math.floor(normalWallet * 0.005 * 100) / 100; // 0.5% of initial
+            }
+            
+            // Handle benefit wallet transfer (1% of initial benefit balance)
             if (user.initialBenefitBalance && user.initialBenefitBalance > 0) {
-                // Use stored initial balance to calculate fixed daily amount
-                const dailyFixedAmount = Math.floor(user.initialBenefitBalance * 0.001 * 100) / 100; // 0.5% of initial
-                benefitWalletTransfer = Math.min(dailyFixedAmount, benefitWallet); // Don't transfer more than available
+                // Use stored initial benefit balance to calculate fixed daily amount
+                benefitWalletTransfer = Math.floor(user.initialBenefitBalance * 0.005 * 100) / 100; // 1% of initial
+                benefitWalletTransfer = Math.min(benefitWalletTransfer, benefitWallet); // Don't transfer more than available
             } else if (benefitWallet > 0) {
                 // First time: store initial balance and calculate fixed amount
                 user.initialBenefitBalance = benefitWallet;
-                benefitWalletTransfer = Math.floor(benefitWallet * 0.005 * 100) / 100; // 0.5% of initial
+                benefitWalletTransfer = Math.floor(benefitWallet * 0.005 * 100) / 100; // 1% of initial
             }
 
             // Update wallet values
@@ -62,7 +71,7 @@ const calculateDailyGrowth = async () => {
                     type: 'withdrawal',
                     amount: normalWalletDeduction,
                     walletType: 'normal',
-                    description: 'Daily 0.5% deduction from normal wallet',
+                    description: 'Daily 0.5% deduction from normal wallet (based on initial deposit)',
                     status: 'completed'
                 }).save({ session });
             }
@@ -74,7 +83,7 @@ const calculateDailyGrowth = async () => {
                     amount: benefitWalletTransfer,
                     walletType: 'benefit',
                     toWalletType: 'withdrawal',
-                    description: `Daily fixed transfer of ₹${benefitWalletTransfer} from benefit wallet to withdrawal wallet (based on initial balance)`,
+                    description: `Daily 1% transfer of ₹${benefitWalletTransfer} from benefit wallet to withdrawal wallet (based on initial balance)`,
                     status: 'completed'
                 }).save({ session });
             }
@@ -116,7 +125,7 @@ const startDailyGrowthScheduler = (runImmediately = false) => {
     }
 
     console.log('Daily wallet processing scheduler started (12:00 PM daily)');
-    console.log('Logic: 0.5% deduction from normal wallet, fixed daily transfer from benefit to withdrawal wallet');
+    console.log('Logic: 0.5% deduction from normal wallet (based on initial deposit), 1% transfer from benefit wallet (based on initial balance)');
 };
 
 const triggerGrowthCalculation = async () => {
@@ -131,18 +140,34 @@ const calculateRemainingDays = (benefitBalance, initialBenefitBalance) => {
     
     if (!initialBenefitBalance) {
         // If no initial balance stored, calculate based on current balance
-        const dailyAmount = Math.floor(benefitBalance * 0.005 * 100) / 100;
+        const dailyAmount = Math.floor(benefitBalance * 0.005 * 100) / 100; // 1% of current balance
         return Math.ceil(benefitBalance / dailyAmount);
     }
     
-    // Calculate based on fixed daily amount
+    // Calculate based on fixed daily amount (1% of initial balance)
     const dailyFixedAmount = Math.floor(initialBenefitBalance * 0.005 * 100) / 100;
     return Math.ceil(benefitBalance / dailyFixedAmount);
+};
+
+// Helper function to calculate remaining days for normal wallet to reach zero
+const calculateNormalWalletRemainingDays = (normalBalance, initialNormalBalance) => {
+    if (normalBalance <= 0) return 0;
+    
+    if (!initialNormalBalance) {
+        // If no initial balance stored, calculate based on current balance
+        const dailyAmount = Math.floor(normalBalance * 0.005 * 100) / 100; // 0.5% of current balance
+        return Math.ceil(normalBalance / dailyAmount);
+    }
+    
+    // Calculate based on fixed daily amount (0.5% of initial balance)
+    const dailyFixedAmount = Math.floor(initialNormalBalance * 0.005 * 100) / 100;
+    return Math.ceil(normalBalance / dailyFixedAmount);
 };
 
 module.exports = {
     startDailyGrowthScheduler,
     triggerGrowthCalculation,
     calculateDailyGrowth,
-    calculateRemainingDays
+    calculateRemainingDays,
+    calculateNormalWalletRemainingDays
 };

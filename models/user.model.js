@@ -49,6 +49,10 @@ let schema = new mongoose.Schema({
         type: Number,
         default: 0
     },
+    initialNormalBalance: {
+        type: Number,
+        default: 0
+    },
     referralCode: {
         type: String,
         unique: true

@@ -3,6 +3,8 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
+const path = require('path');
+const fs = require('fs');
 
 const Admin = require('../models/admin.model');
 const User = require('../models/user.model');
@@ -94,7 +96,10 @@ router.get('/profile', authenticateAdmin, async (req, res) => {
     const admin = await Admin.findById(req.admin._id).select('-password');
     res.status(200).json({
       success: true,
-      admin
+      admin: {
+        ...admin.toObject(),
+        profileImageTitle: admin.profileImageTitle || null
+      }
     });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error', error: error.message });
@@ -842,6 +847,427 @@ router.post('/withdrawal/:id/reject', authenticateAdmin, async (req, res) => {
     } finally {
       session.endSession();
     }
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+});
+
+// ==================== NEW ADMIN MANAGEMENT APIs ====================
+
+/* Get all admins (superadmin only) */
+router.get('/all', authenticateAdmin, async (req, res) => {
+  try {
+    // Check if current admin is superadmin
+    if (req.admin.role !== 'superadmin') {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Access denied. Only superadmin can view all admins.' 
+      });
+    }
+
+    const admins = await Admin.find().select('-password profileImage profileImageTitle').sort({ createdAt: -1 });
+    
+    res.status(200).json({
+      success: true,
+      count: admins.length,
+      admins
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+});
+
+/* Get admin by ID (superadmin only) */
+router.get('/:id', authenticateAdmin, async (req, res) => {
+  try {
+    // Check if current admin is superadmin or requesting their own profile
+    if (req.admin.role !== 'superadmin' && req.admin._id.toString() !== req.params.id) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Access denied. You can only view your own profile.' 
+      });
+    }
+
+    const admin = await Admin.findById(req.params.id).select('-password');
+    
+    if (!admin) {
+      return res.status(404).json({ success: false, message: 'Admin not found' });
+    }
+    
+    res.status(200).json({
+      success: true,
+      admin: {
+        ...admin.toObject(),
+        profileImageTitle: admin.profileImageTitle || null
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+});
+
+/* Update admin profile (admin can update their own, superadmin can update any) */
+router.put('/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const { name, email, walletAddress, profileImageTitle } = req.body;
+    const adminId = req.params.id;
+
+    // Check if current admin is superadmin or updating their own profile
+    if (req.admin.role !== 'superadmin' && req.admin._id.toString() !== adminId) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Access denied. You can only update your own profile.' 
+      });
+    }
+
+    const admin = await Admin.findById(adminId);
+    
+    if (!admin) {
+      return res.status(404).json({ success: false, message: 'Admin not found' });
+    }
+
+    // Check if email is being changed and if it already exists
+    if (email && email !== admin.email) {
+      const existingAdmin = await Admin.findOne({ email });
+      if (existingAdmin) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Email already exists' 
+        });
+      }
+    }
+
+    // Update fields
+    if (name) admin.name = name;
+    if (email) admin.email = email;
+    if (walletAddress !== undefined) admin.walletAddress = walletAddress;
+    if (profileImageTitle !== undefined) admin.profileImageTitle = profileImageTitle;
+
+    await admin.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Admin profile updated successfully',
+      admin: {
+        id: admin._id,
+        name: admin.name,
+        email: admin.email,
+        role: admin.role,
+        profileImage: admin.profileImage,
+        profileImageTitle: admin.profileImageTitle,
+        walletAddress: admin.walletAddress,
+        isActive: admin.isActive,
+        lastLogin: admin.lastLogin
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+});
+
+/* Upload admin profile image */
+router.post('/:id/upload-image', authenticateAdmin, async (req, res) => {
+  try {
+    const adminId = req.params.id;
+    const { title } = req.body;
+
+    // Check if current admin is superadmin or updating their own profile
+    if (req.admin.role !== 'superadmin' && req.admin._id.toString() !== adminId) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Access denied. You can only update your own profile.' 
+      });
+    }
+
+    const admin = await Admin.findById(adminId);
+    
+    if (!admin) {
+      return res.status(404).json({ success: false, message: 'Admin not found' });
+    }
+
+    // Import upload middleware
+    const { uploadSingle, handleUploadError } = require('../middleware/upload');
+
+    // Handle file upload
+    uploadSingle(req, res, async (err) => {
+      if (err) {
+        return handleUploadError(err, req, res, () => {});
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'No file uploaded' 
+        });
+      }
+
+      try {
+        // Delete old profile image if exists
+        if (admin.profileImage) {
+          const oldImagePath = path.join(__dirname, '..', admin.profileImage);
+          if (fs.existsSync(oldImagePath)) {
+            fs.unlinkSync(oldImagePath);
+          }
+        }
+
+        // Update admin profile with new image path and title
+        const imagePath = `/uploads/${req.file.filename}`;
+        admin.profileImage = imagePath;
+        admin.profileImageTitle = title || null;
+        await admin.save();
+
+        res.status(200).json({
+          success: true,
+          message: 'Profile image uploaded successfully',
+          imagePath: imagePath,
+          title: admin.profileImageTitle,
+          admin: {
+            id: admin._id,
+            name: admin.name,
+            email: admin.email,
+            profileImage: admin.profileImage,
+            profileImageTitle: admin.profileImageTitle
+          }
+        });
+      } catch (error) {
+        // Delete uploaded file if database update fails
+        if (req.file) {
+          const filePath = path.join(__dirname, '..', 'uploads', req.file.filename);
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+          }
+        }
+        throw error;
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+});
+
+/* Delete admin profile image */
+router.delete('/:id/delete-image', authenticateAdmin, async (req, res) => {
+  try {
+    const adminId = req.params.id;
+
+    // Check if current admin is superadmin or updating their own profile
+    if (req.admin.role !== 'superadmin' && req.admin._id.toString() !== adminId) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Access denied. You can only update your own profile.' 
+      });
+    }
+
+    const admin = await Admin.findById(adminId);
+    
+    if (!admin) {
+      return res.status(404).json({ success: false, message: 'Admin not found' });
+    }
+
+    if (!admin.profileImage) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'No profile image to delete' 
+      });
+    }
+
+    // Delete image file from filesystem
+    const imagePath = path.join(__dirname, '..', admin.profileImage);
+    if (fs.existsSync(imagePath)) {
+      fs.unlinkSync(imagePath);
+    }
+
+            // Remove image path and title from admin profile
+        admin.profileImage = null;
+        admin.profileImageTitle = null;
+        await admin.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Profile image deleted successfully',
+      admin: {
+        id: admin._id,
+        name: admin.name,
+        email: admin.email,
+        profileImage: admin.profileImage
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+});
+
+/* Update admin wallet address */
+router.put('/:id/wallet-address', authenticateAdmin, async (req, res) => {
+  try {
+    const { walletAddress } = req.body;
+    const adminId = req.params.id;
+
+    if (!walletAddress) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Wallet address is required' 
+      });
+    }
+
+    // Check if current admin is superadmin or updating their own profile
+    if (req.admin.role !== 'superadmin' && req.admin._id.toString() !== adminId) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Access denied. You can only update your own profile.' 
+      });
+    }
+
+    const admin = await Admin.findById(adminId);
+    
+    if (!admin) {
+      return res.status(404).json({ success: false, message: 'Admin not found' });
+    }
+
+    // Update wallet address
+    admin.walletAddress = walletAddress;
+    await admin.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Wallet address updated successfully',
+      admin: {
+        id: admin._id,
+        name: admin.name,
+        email: admin.email,
+        walletAddress: admin.walletAddress
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+});
+
+/* Toggle admin active status (superadmin only) */
+router.patch('/:id/toggle-status', authenticateAdmin, async (req, res) => {
+  try {
+    // Check if current admin is superadmin
+    if (req.admin.role !== 'superadmin') {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Access denied. Only superadmin can toggle admin status.' 
+      });
+    }
+
+    const adminId = req.params.id;
+
+    // Prevent superadmin from deactivating themselves
+    if (req.admin._id.toString() === adminId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Cannot deactivate your own account' 
+      });
+    }
+
+    const admin = await Admin.findById(adminId);
+    
+    if (!admin) {
+      return res.status(404).json({ success: false, message: 'Admin not found' });
+    }
+
+    // Toggle status
+    admin.isActive = !admin.isActive;
+    await admin.save();
+
+    res.status(200).json({
+      success: true,
+      message: `Admin ${admin.isActive ? 'activated' : 'deactivated'} successfully`,
+      admin: {
+        id: admin._id,
+        name: admin.name,
+        email: admin.email,
+        isActive: admin.isActive
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+});
+
+/* Delete admin (superadmin only) */
+router.delete('/:id', authenticateAdmin, async (req, res) => {
+  try {
+    // Check if current admin is superadmin
+    if (req.admin.role !== 'superadmin') {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Access denied. Only superadmin can delete admins.' 
+      });
+    }
+
+    const adminId = req.params.id;
+
+    // Prevent superadmin from deleting themselves
+    if (req.admin._id.toString() === adminId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Cannot delete your own account' 
+      });
+    }
+
+    const admin = await Admin.findById(adminId);
+    
+    if (!admin) {
+      return res.status(404).json({ success: false, message: 'Admin not found' });
+    }
+
+    // Delete profile image if exists
+    if (admin.profileImage) {
+      const imagePath = path.join(__dirname, '..', admin.profileImage);
+      if (fs.existsSync(imagePath)) {
+        fs.unlinkSync(imagePath);
+      }
+    }
+
+    // Delete admin
+    await Admin.findByIdAndDelete(adminId);
+
+    res.status(200).json({
+      success: true,
+      message: 'Admin deleted successfully'
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+});
+
+/* Get admin statistics (superadmin only) */
+router.get('/stats/overview', authenticateAdmin, async (req, res) => {
+  try {
+    // Check if current admin is superadmin
+    if (req.admin.role !== 'superadmin') {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Access denied. Only superadmin can view admin statistics.' 
+      });
+    }
+
+    const totalAdmins = await Admin.countDocuments();
+    const activeAdmins = await Admin.countDocuments({ isActive: true });
+    const superadmins = await Admin.countDocuments({ role: 'superadmin' });
+    const regularAdmins = await Admin.countDocuments({ role: 'admin' });
+
+    // Get recent admin activities
+    const recentAdmins = await Admin.find()
+      .select('name email role isActive lastLogin createdAt profileImage profileImageTitle')
+      .sort({ lastLogin: -1 })
+      .limit(5);
+
+    res.status(200).json({
+      success: true,
+      stats: {
+        totalAdmins,
+        activeAdmins,
+        superadmins,
+        regularAdmins,
+        recentAdmins
+      }
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }

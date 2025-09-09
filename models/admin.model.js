@@ -27,6 +27,14 @@ const adminSchema = new mongoose.Schema({
         type: String,
         default: null
     },
+    walletImage: {
+        type: String,
+        default: null
+    },
+    walletImageTitle: {
+        type: String,
+        default: null
+    },
     walletAddress: {
         type: String,
         default: null

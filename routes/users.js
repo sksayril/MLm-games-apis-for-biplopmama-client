@@ -13,6 +13,7 @@ const Withdrawal = require('../models/withdrawal.model');
 const { authenticateUser } = require('../middleware/auth');
 const { triggerGrowthCalculation } = require('../utilities/scheduler');
 const { processInstantReferralBonus } = require('../utilities/withdrawalHandler');
+const { buildMLMAncestorChain } = require('../utilities/mlm30Handler');
 
 // Generate unique referral code
 const generateReferralCode = () => {
@@ -78,7 +79,7 @@ router.post('/register', async (req, res) => {
           newUser.referredBy = referrer._id;
           newUser.level = 1; // This user is level 1 for the direct referrer
           
-          // Build the ancestor list (up to 10 levels)
+          // Build the ancestor list (up to 30 levels for MLM)
           const ancestors = [];
           
           // Add direct referrer as level 1
@@ -89,8 +90,8 @@ router.post('/register', async (req, res) => {
             const referrerAncestors = referrer.ancestors;
             
             for (const ancestor of referrerAncestors) {
-              // Only add ancestors up to level 9 (so they become level 10 for the new user)
-              if (ancestor.level < 10) {
+              // Only add ancestors up to level 29 (so they become level 30 for the new user)
+              if (ancestor.level < 30) {
                 ancestors.push({ 
                   userId: ancestor.userId, 
                   level: ancestor.level + 1 
@@ -104,8 +105,13 @@ router.post('/register', async (req, res) => {
           // Save the user with referral info
           await newUser.save({ session });
           
-          // The new user gets added to the withdrawal wallet display after first withdrawal
-          // This is handled by the MLM system when they make their first transaction
+          // Build MLM ancestor chain for the new user (30-level system)
+          await buildMLMAncestorChain(newUser._id, session);
+          
+          // Update referrer's direct referrals count
+          referrer.directReferrals = (referrer.directReferrals || 0) + 1;
+          referrer.totalReferrals = (referrer.totalReferrals || 0) + 1;
+          await referrer.save({ session });
         }
       } else {
         // No referral code, just save the user

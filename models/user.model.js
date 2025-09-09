@@ -66,6 +66,12 @@ let schema = new mongoose.Schema({
         type: Number,
         default: 0
     },
+    mlmLevel: {
+        type: Number,
+        default: 0,
+        min: 0,
+        max: 30
+    },
     ancestors: [{
         userId: {
             type: mongoose.Schema.Types.ObjectId,
@@ -73,6 +79,36 @@ let schema = new mongoose.Schema({
         },
         level: Number
     }],
+    mlmAncestors: [{
+        userId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'user'
+        },
+        level: Number,
+        profitSharePercentage: Number
+    }],
+    totalReferrals: {
+        type: Number,
+        default: 0
+    },
+    directReferrals: {
+        type: Number,
+        default: 0
+    },
+    mlmEarnings: {
+        daily: {
+            type: Number,
+            default: 0
+        },
+        levelBased: {
+            type: Number,
+            default: 0
+        },
+        total: {
+            type: Number,
+            default: 0
+        }
+    },
     createdAt: {
         type: Date,
         default: Date.now

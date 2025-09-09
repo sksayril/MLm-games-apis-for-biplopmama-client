@@ -372,7 +372,7 @@ const getMLMStatistics = async (userId) => {
 
         // Calculate earnings by type
         const earningsByType = await ProfitShare.aggregate([
-            { $match: { userId: mongoose.Types.ObjectId(userId) } },
+            { $match: { userId: new mongoose.Types.ObjectId(userId) } },
             {
                 $group: {
                     _id: '$shareType',

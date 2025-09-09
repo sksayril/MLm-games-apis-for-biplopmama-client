@@ -137,7 +137,7 @@ router.get('/earnings-summary', authenticateUser, async (req, res) => {
         const userId = req.user._id;
         
         const earningsByType = await ProfitShare.aggregate([
-            { $match: { userId: mongoose.Types.ObjectId(userId) } },
+            { $match: { userId: new mongoose.Types.ObjectId(userId) } },
             {
                 $group: {
                     _id: '$shareType',
@@ -150,7 +150,7 @@ router.get('/earnings-summary', authenticateUser, async (req, res) => {
         ]);
         
         const monthlyEarnings = await ProfitShare.aggregate([
-            { $match: { userId: mongoose.Types.ObjectId(userId) } },
+            { $match: { userId: new mongoose.Types.ObjectId(userId) } },
             {
                 $group: {
                     _id: {
